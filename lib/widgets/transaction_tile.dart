@@ -4,15 +4,19 @@ import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 
 class TransactionTile extends StatelessWidget {
-  const TransactionTile({required this.transaction, super.key});
+  const TransactionTile({required this.transaction, this.onTap, super.key});
 
   final TransactionModel transaction;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDebit = transaction.type == TransactionType.debit;
     final signedSymbol = isDebit ? '-' : '+';
     final amountColor = isDebit ? Colors.red.shade700 : Colors.green.shade700;
+    final title = transaction.merchant.trim() == 'N/A'
+      ? (transaction.bankRemark ?? 'N/A')
+      : transaction.merchant;
     final categoryLabel = isDebit
         ? (transaction.category == null || transaction.category!.trim().isEmpty
               ? 'Uncategorized'
@@ -21,6 +25,7 @@ class TransactionTile extends StatelessWidget {
 
     return Card(
       child: ListTile(
+        onTap: onTap,
         leading: CircleAvatar(
           backgroundColor: isDebit
               ? Colors.red.shade100
@@ -30,7 +35,7 @@ class TransactionTile extends StatelessWidget {
             color: isDebit ? Colors.red.shade700 : Colors.green.shade700,
           ),
         ),
-        title: Text(transaction.merchant),
+        title: Text(title),
         subtitle: Text(
           '$categoryLabel • ${DateFormat('dd MMM yyyy').format(transaction.date)}',
         ),

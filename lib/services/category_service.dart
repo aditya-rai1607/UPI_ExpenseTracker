@@ -3,22 +3,64 @@ import 'package:hive_flutter/hive_flutter.dart';
 class CategoryService {
   static const String categoriesBoxName = 'categories';
   static const String merchantRulesBoxName = 'merchant_category_rules';
+  static const String uncategorized = 'Uncategorized';
+  static const String customCategoryOption = 'Custom...';
 
   static const List<String> defaultCategories = <String>[
+    'Cabs',
+    'Cooking Gas',
+    'Drinks',
+    'Drinks Snacks',
+    'Electricity',
+    'Flights',
     'Food',
-    'Travel',
+    'Fuel',
+    'Get Back',
+    'Groceries',
+    'Hotels',
+    'Insurance',
+    'Lend',
+    'Medical Bills',
+    'Miscellaneous',
+    'Movies',
+    'Parking/Tolls',
+    'Phone Bills',
+    'Rent',
+    'Repair',
     'Shopping',
-    'Bills',
-    'Transfer',
-    'Health',
-    'Others',
-    'Uncategorized',
+    'Sports',
+    'Subscriptions',
+    'Tea/Coffee',
+    'Train',
+    uncategorized,
   ];
 
   static Future<void> ensureDefaults() async {
     final categoriesBox = Hive.box(categoriesBoxName);
     if (categoriesBox.isEmpty) {
       await categoriesBox.put('items', defaultCategories);
+    } else {
+      final mergedCategories = <String>[];
+      final seen = <String>{};
+
+      for (final category in getCategories()) {
+        final trimmed = category.trim();
+        if (trimmed.isEmpty || seen.contains(trimmed)) {
+          continue;
+        }
+        seen.add(trimmed);
+        mergedCategories.add(trimmed);
+      }
+
+      for (final category in defaultCategories) {
+        if (seen.contains(category)) {
+          continue;
+        }
+        seen.add(category);
+        mergedCategories.add(category);
+      }
+
+      await categoriesBox.put('items', mergedCategories);
     }
 
     final merchantRulesBox = Hive.box(merchantRulesBoxName);
@@ -40,6 +82,36 @@ class CategoryService {
       return items.map((dynamic item) => item.toString()).toList();
     }
     return defaultCategories;
+  }
+
+  static List<String> getSelectableCategories() {
+    final seen = <String>{};
+    final categories = <String>[];
+
+    for (final category in getCategories()) {
+      final trimmed = category.trim();
+      if (trimmed.isEmpty ||
+          trimmed == uncategorized ||
+          seen.contains(trimmed)) {
+        continue;
+      }
+      seen.add(trimmed);
+      categories.add(trimmed);
+    }
+
+    return categories;
+  }
+
+  static List<String> getDropdownCategories() {
+    return <String>[...getSelectableCategories(), customCategoryOption];
+  }
+
+  static String? normalizeSelectedCategory(String? category) {
+    final trimmed = category?.trim();
+    if (trimmed == null || trimmed.isEmpty || trimmed == uncategorized) {
+      return null;
+    }
+    return trimmed;
   }
 
   static Future<void> addCategory(String category) async {

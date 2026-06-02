@@ -4,70 +4,128 @@ import 'package:intl/intl.dart';
 
 import '../models/transaction_model.dart';
 import '../services/category_service.dart';
-import '../services/transaction_parser.dart';
 
-class AddTransactionScreen extends StatefulWidget {
-  const AddTransactionScreen({super.key});
+class TransactionDetailScreen extends StatefulWidget {
+  const TransactionDetailScreen({
+    required this.transaction,
+    required this.transactionKey,
+    super.key,
+  });
+
+  final TransactionModel transaction;
+  final dynamic transactionKey;
 
   @override
-  State<AddTransactionScreen> createState() => _AddTransactionScreenState();
+  State<TransactionDetailScreen> createState() =>
+      _TransactionDetailScreenState();
 }
 
-class _AddTransactionScreenState extends State<AddTransactionScreen> {
+class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _merchantController = TextEditingController();
-  final _noteController = TextEditingController();
+  late final TextEditingController _amountController;
+  late final TextEditingController _bankRemarkController;
+  late final TextEditingController _merchantController;
+  late final TextEditingController _noteController;
 
-  TransactionType _type = TransactionType.debit;
-  DateTime _date = DateTime.now();
+  late TransactionType _type;
+  late DateTime _date;
   String? _category;
+  bool _isSaving = false;
+  bool _isDeleting = false;
+
+  InputDecoration _readOnlyDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      border: const OutlineInputBorder(),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _amountController = TextEditingController(
+      text: widget.transaction.amount.toStringAsFixed(2),
+    );
+    _bankRemarkController = TextEditingController(
+      text: widget.transaction.bankRemark ?? '',
+    );
+    _merchantController = TextEditingController(
+      text: widget.transaction.merchant,
+    );
+    _noteController = TextEditingController(
+      text: widget.transaction.note ?? '',
+    );
+    _type = widget.transaction.type;
+    _date = widget.transaction.date;
+    _category = CategoryService.normalizeSelectedCategory(
+      widget.transaction.category,
+    );
+  }
 
   @override
   void dispose() {
     _amountController.dispose();
+    _bankRemarkController.dispose();
     _merchantController.dispose();
     _noteController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2018),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (selected != null) {
-      setState(() {
-        _date = selected;
-      });
-    }
-  }
-
-  Future<void> _saveTransaction() async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final amount = double.parse(_amountController.text.trim());
-    final merchant = _merchantController.text.trim();
-    final suggestion = TransactionParser.suggestCategory(merchant);
+    setState(() {
+      _isSaving = true;
+    });
 
-    final transaction = TransactionModel(
-      amount: amount,
-      merchant: merchant,
-      category: _type == TransactionType.debit
-          ? (_category ?? suggestion)
-          : null,
-      date: _date,
-      type: _type,
-      note: _noteController.text.trim().isEmpty
-          ? null
-          : _noteController.text.trim(),
+    final updated = widget.transaction.copyWith(
+      merchant: _merchantController.text.trim(),
+      category: widget.transaction.type == TransactionType.debit ? _category : null,
     );
 
-    await Hive.box('transactions').add(transaction.toMap());
+    await Hive.box('transactions').put(widget.transactionKey, updated.toMap());
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pop(true);
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Transaction'),
+          content: const Text('This transaction will be removed permanently.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    await Hive.box('transactions').delete(widget.transactionKey);
 
     if (!mounted) {
       return;
@@ -146,7 +204,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final categories = CategoryService.getDropdownCategories();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Transaction')),
+      appBar: AppBar(title: const Text('Transaction Details')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -155,17 +213,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
             children: <Widget>[
               TextFormField(
                 controller: _amountController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(labelText: 'Amount'),
-                validator: (value) {
-                  final parsed = double.tryParse((value ?? '').trim());
-                  if (parsed == null || parsed <= 0) {
-                    return 'Enter a valid amount';
-                  }
-                  return null;
-                },
+                readOnly: true,
+                decoration: _readOnlyDecoration('Amount'),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -181,9 +230,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 },
               ),
               const SizedBox(height: 12),
+              TextFormField(
+                controller: _bankRemarkController,
+                readOnly: true,
+                maxLines: 3,
+                decoration: _readOnlyDecoration('Bank Remark'),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<TransactionType>(
                 initialValue: _type,
-                decoration: const InputDecoration(labelText: 'Type'),
+                decoration: _readOnlyDecoration('Type'),
                 items: const <DropdownMenuItem<TransactionType>>[
                   DropdownMenuItem(
                     value: TransactionType.debit,
@@ -194,29 +250,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     child: Text('Credit (Income)'),
                   ),
                 ],
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _type = value;
-                    if (_type == TransactionType.credit) {
-                      _category = null;
-                    }
-                  });
-                },
+                onChanged: null,
               ),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Date'),
-                subtitle: Text(DateFormat('dd MMM yyyy').format(_date)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.calendar_month),
-                  onPressed: _pickDate,
+              InputDecorator(
+                decoration: _readOnlyDecoration('Date'),
+                child: Row(
+                  children: <Widget>[
+                    const Icon(Icons.calendar_month, color: Colors.grey),
+                    const SizedBox(width: 12),
+                    Text(DateFormat('dd MMM yyyy').format(_date)),
+                  ],
                 ),
               ),
-              if (_type == TransactionType.debit) ...<Widget>[
+              const SizedBox(height: 12),
+              if (widget.transaction.type == TransactionType.debit) ...<Widget>[
                 DropdownButtonFormField<String>(
                   initialValue: CategoryService.normalizeSelectedCategory(
                     _category,
@@ -236,13 +284,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ],
               TextFormField(
                 controller: _noteController,
+                readOnly: true,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Note (optional)'),
+                decoration: _readOnlyDecoration('Note / Reference'),
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _saveTransaction,
-                child: const Text('Save Transaction'),
+              FilledButton(
+                onPressed: _isSaving ? null : _save,
+                child: Text(_isSaving ? 'Saving...' : 'Save Changes'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _isDeleting ? null : _delete,
+                child: Text(_isDeleting ? 'Deleting...' : 'Delete Transaction'),
               ),
             ],
           ),

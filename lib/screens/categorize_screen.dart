@@ -67,11 +67,74 @@ class _CategorizeScreenState extends State<CategorizeScreen> {
     Navigator.of(context).pop(true);
   }
 
+  Future<void> _handleCategorySelection(dynamic itemKey, String? value) async {
+    if (value == null) {
+      return;
+    }
+
+    if (value == CategoryService.customCategoryOption) {
+      final customCategory = await _showCustomCategoryDialog();
+      if (customCategory == null) {
+        return;
+      }
+
+      await CategoryService.addCategory(customCategory);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _selectedCategoryByKey[itemKey] = customCategory;
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedCategoryByKey[itemKey] = value;
+    });
+  }
+
+  Future<String?> _showCustomCategoryDialog() async {
+    final controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add Custom Category'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Category name'),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop(controller.text.trim());
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+
+    final normalized = result?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final categories = CategoryService.getCategories()
-        .where((String c) => c != 'Uncategorized')
-        .toList();
+    final categories = CategoryService.getDropdownCategories();
 
     final items = _loadUncategorizedDebits();
 
@@ -119,14 +182,8 @@ class _CategorizeScreenState extends State<CategorizeScreen> {
                                         ),
                                       )
                                       .toList(),
-                                  onChanged: (value) {
-                                    if (value == null) {
-                                      return;
-                                    }
-                                    setState(() {
-                                      _selectedCategoryByKey[item.key] = value;
-                                    });
-                                  },
+                                  onChanged: (value) =>
+                                      _handleCategorySelection(item.key, value),
                                 ),
                               ],
                             ),

@@ -31,7 +31,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: <String>['xlsx'],
+        allowedExtensions: <String>['xls', 'xlsx'],
         withData: true,
       );
 
@@ -46,7 +46,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
         return;
       }
 
-      final parsed = XlsxImportService.parseBytes(bytes);
+      final parsed = XlsxImportService.parseBytes(bytes, fileName: file.name);
 
       setState(() {
         _fileName = file.name;
@@ -122,7 +122,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Import Bank Statement (.xlsx)')),
+      appBar: AppBar(title: const Text('Import Bank Statement (.xls/.xlsx)')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -131,7 +131,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
             ElevatedButton.icon(
               onPressed: _isParsing ? null : _pickAndParseFile,
               icon: const Icon(Icons.upload_file),
-              label: Text(_isParsing ? 'Parsing...' : 'Select XLSX File'),
+              label: Text(_isParsing ? 'Parsing...' : 'Select XLS / XLSX File'),
             ),
             const SizedBox(height: 12),
             if (_fileName != null) Text('File: $_fileName'),
@@ -148,9 +148,12 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                   final signed = transaction.type == TransactionType.debit
                       ? '-'
                       : '+';
+                  final title = transaction.merchant.trim() == 'N/A'
+                      ? (transaction.bankRemark ?? 'N/A')
+                      : transaction.merchant;
                   return Card(
                     child: ListTile(
-                      title: Text(transaction.merchant),
+                      title: Text(title),
                       subtitle: Text(
                         '${DateFormat('dd MMM yyyy').format(transaction.date)} • ${transaction.type.name.toUpperCase()}',
                       ),

@@ -7,6 +7,7 @@ class TransactionModel {
     String? id,
     required this.amount,
     required this.merchant,
+    this.bankRemark,
     this.category,
     required this.date,
     required this.type,
@@ -18,6 +19,7 @@ class TransactionModel {
   final String id;
   final double amount;
   final String merchant;
+  final String? bankRemark;
   final String? category;
   final DateTime date;
   final TransactionType type;
@@ -31,19 +33,26 @@ class TransactionModel {
           category == 'Uncategorized');
 
   String get fingerprint {
-    final normalizedMerchant = merchant.trim().toLowerCase();
-    final normalizedDate = DateTime(
-      date.year,
-      date.month,
-      date.day,
-    ).toIso8601String();
-    return '$normalizedDate|${amount.toStringAsFixed(2)}|${type.name}|$normalizedMerchant';
+    final normalizedRemark = _normalizeIdentityPart(bankRemark);
+    final normalizedMerchant = _normalizeIdentityPart(merchant);
+    final identityPart = normalizedRemark.isNotEmpty
+        ? normalizedRemark
+        : normalizedMerchant;
+    return '${amount.toStringAsFixed(2)}|$identityPart';
+  }
+
+  static String _normalizeIdentityPart(String? value) {
+    return (value ?? '')
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ');
   }
 
   TransactionModel copyWith({
     String? id,
     double? amount,
     String? merchant,
+    String? bankRemark,
     String? category,
     DateTime? date,
     TransactionType? type,
@@ -54,6 +63,7 @@ class TransactionModel {
       id: id ?? this.id,
       amount: amount ?? this.amount,
       merchant: merchant ?? this.merchant,
+      bankRemark: bankRemark ?? this.bankRemark,
       category: category ?? this.category,
       date: date ?? this.date,
       type: type ?? this.type,
@@ -67,6 +77,7 @@ class TransactionModel {
       'id': id,
       'amount': amount,
       'merchant': merchant,
+      'bankRemark': bankRemark,
       'category': category,
       'date': date.toIso8601String(),
       'type': type.name,
@@ -95,7 +106,8 @@ class TransactionModel {
     return TransactionModel(
       id: map['id']?.toString(),
       amount: amount,
-      merchant: map['merchant']?.toString() ?? 'Unknown',
+      merchant: map['merchant']?.toString() ?? 'N/A',
+      bankRemark: map['bankRemark']?.toString(),
       category: map['category']?.toString(),
       date: parsedDate,
       type: parsedType,
