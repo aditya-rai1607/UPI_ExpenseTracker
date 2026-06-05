@@ -4,7 +4,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../models/transaction_model.dart';
+import '../services/app_settings_service.dart';
 import '../services/analytics_service.dart';
+import '../services/google_sheets_backup_service.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 import 'categorize_screen.dart';
@@ -23,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   TransactionFilter _filter = TransactionFilter.all;
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  bool _isBackingUp = false;
 
   Future<void> _openAddTransaction() async {
     await Navigator.of(context).push(
@@ -53,6 +56,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _backupToGoogleSheets() async {
+    final configuredEndpoint = await _ensureBackupEndpoint();
+    if (!configuredEndpoint) {
+      return;
+    }
+
+    setState(() {
+      _isBackingUp = true;
+    });
+
+    final result = await GoogleSheetsBackupService.backupTransactions();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isBackingUp = false;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+  }
+
+  Future<bool> _ensureBackupEndpoint() async {
+    final existing = AppSettingsService.getGoogleSheetsEndpoint();
+    if (existing != null) {
+      return true;
+    }
+
+    final controller = TextEditingController();
+    final endpoint = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Google Sheets Backup URL'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Apps Script Web App URL',
+              hintText: 'https://script.google.com/macros/s/.../exec',
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+
+    final normalized = endpoint?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return false;
+    }
+
+    await AppSettingsService.setGoogleSheetsEndpoint(normalized);
+    return true;
   }
 
   bool _matchesFilter(TransactionModel transaction) {
@@ -98,11 +170,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final box = Hive.box('transactions');
+    final lastBackupAt = AppSettingsService.getLastBackupAt();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('UPI Expense Tracker'),
         actions: <Widget>[
+          IconButton(
+            tooltip: 'Backup to Google Sheets',
+            onPressed: _isBackingUp ? null : _backupToGoogleSheets,
+            icon: _isBackingUp
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+          ),
           IconButton(
             tooltip: 'Categorize Debits',
             onPressed: _openCategorizeScreen,
@@ -152,6 +236,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               'Monthly analytics',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            if (lastBackupAt != null)
+                              Text(
+                                'Last backup: ${DateFormat('dd MMM, hh:mm a').format(lastBackupAt.toLocal())}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                           ],
                         ),
                       ),
