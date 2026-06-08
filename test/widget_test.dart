@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -30,7 +29,7 @@ void main() {
     await tester.pumpWidget(const MyApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('UPI Expense Tracker'), findsOneWidget);
-    expect(find.byIcon(Icons.upload_file), findsOneWidget);
+    expect(find.text('Hey Aditya!'), findsOneWidget);
+    expect(find.text('Import'), findsOneWidget);
   });
 }

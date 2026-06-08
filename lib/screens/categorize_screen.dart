@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
 
 import '../models/transaction_model.dart';
 import '../services/category_service.dart';
@@ -169,6 +170,14 @@ class _CategorizeScreenState extends State<CategorizeScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   '₹${item.transaction.amount.toStringAsFixed(2)}',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  DateFormat('dd MMM yyyy, hh:mm a').format(
+                                    item.transaction.date,
+                                  ),
+                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
                                 const SizedBox(height: 12),
                                 DropdownButtonFormField<String>(

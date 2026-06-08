@@ -129,10 +129,14 @@ class XlsxImportService {
               TransactionParser.suggestCategory(bankRemark ?? '');
         }
 
+        final extractedMerchant = bankRemark != null
+            ? TransactionParser.extractMerchant(bankRemark)
+            : '';
+
         transactions.add(
           TransactionModel(
             amount: amount,
-            merchant: 'N/A',
+            merchant: extractedMerchant.isNotEmpty ? extractedMerchant : 'N/A',
             bankRemark: bankRemark,
             category: type == TransactionType.debit ? category : null,
             date: date,
