@@ -13,13 +13,21 @@ class InsightsScreen extends StatefulWidget {
 }
 
 class _InsightsScreenState extends State<InsightsScreen> {
-  static const Color _backgroundColor = Color(0xFFF6F7FB);
-  static const Color _surfaceColor = Colors.white;
   static const Color _successColor = Color(0xFF22C55E);
   static const Color _expenseColor = Color(0xFFEF4444);
-  static const Color _textColor = Color(0xFF14161F);
-  static const Color _mutedTextColor = Color(0xFF8B90A0);
-  static const Color _softBorderColor = Color(0xFFE9EBF2);
+
+  Color _backgroundColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _surfaceColor(BuildContext context) => Theme.of(context).cardColor;
+  Color _textColor(BuildContext context) => Theme.of(context).colorScheme.onSurface;
+  Color _mutedTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  Color _softBorderColor(BuildContext context) => Theme.of(context).dividerColor;
+  Color _softAccentSurface(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF1A2233)
+        : const Color(0xFFF8F9FD);
+  }
 
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
@@ -47,16 +55,16 @@ class _InsightsScreenState extends State<InsightsScreen> {
     final box = Hive.box('transactions');
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: _backgroundColor(context),
       appBar: AppBar(
-        backgroundColor: _backgroundColor,
+        backgroundColor: _backgroundColor(context),
         elevation: 0,
         scrolledUnderElevation: 0,
         titleSpacing: 0,
         title: Text(
           'Insights',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: _textColor,
+            color: _textColor(context),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -69,8 +77,15 @@ class _InsightsScreenState extends State<InsightsScreen> {
               transactions: _readTransactions(box),
               month: _selectedMonth,
             );
-            final categoryEntries = analytics.expenseByCategory.entries.toList()
+            final categoryEntries = AnalyticsService.calculateAmountsByCategory(
+              transactions: _readTransactions(box),
+              month: _selectedMonth,
+            ).entries.toList()
               ..sort((a, b) => b.value.compareTo(a.value));
+            final maxCategoryValue = categoryEntries.fold<double>(
+              0,
+              (max, entry) => entry.value > max ? entry.value : max,
+            );
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
@@ -78,9 +93,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: _surfaceColor,
+                    color: _surfaceColor(context),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _softBorderColor),
+                    border: Border.all(color: _softBorderColor(context)),
                   ),
                   child: Row(
                     children: <Widget>[
@@ -94,7 +109,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
-                                color: _textColor,
+                                color: _textColor(context),
                                 fontWeight: FontWeight.w700,
                               ),
                         ),
@@ -128,58 +143,64 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ),
                 const SizedBox(height: 12),
                 _InsightMetricCard(
-                  label: 'Net Cashflow',
-                  value: analytics.netCashflow,
-                  accent: analytics.netCashflow >= 0
-                      ? _successColor
-                      : _expenseColor,
+                  label: 'Savings',
+                  value: analytics.totalInvestment,
+                  accent: _successColor,
                 ),
                 const SizedBox(height: 14),
                 _InsightSection(
-                  title: 'Category Breakdown',
+                  title: 'Category Graph',
                   child: categoryEntries.isEmpty
                       ? Text(
                           'No expenses recorded for this month.',
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: _mutedTextColor),
+                              ?.copyWith(color: _mutedTextColor(context)),
                         )
                       : Column(
                           children: categoryEntries.map((entry) {
-                            final percentage = analytics.totalExpense == 0
-                                ? 0
-                                : (entry.value / analytics.totalExpense) * 100;
+                            final ratio = maxCategoryValue == 0
+                                ? 0.0
+                                : entry.value / maxCategoryValue;
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.only(bottom: 14),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: <Widget>[
-                                  Expanded(
+                                  SizedBox(
+                                    width: 96,
                                     child: Text(
                                       entry.key,
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
                                           ?.copyWith(
-                                            color: _textColor,
+                                            color: _textColor(context),
                                             fontWeight: FontWeight.w600,
                                           ),
                                     ),
                                   ),
-                                  Text(
-                                    '${percentage.toStringAsFixed(0)}%',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: _mutedTextColor,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
                                   const SizedBox(width: 10),
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(999),
+                                      child: LinearProgressIndicator(
+                                        value: ratio,
+                                        minHeight: 14,
+                                        backgroundColor: _softBorderColor(context),
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          _expenseColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
                                   Text(
                                     '₹${entry.value.toStringAsFixed(0)}',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                          color: _textColor,
+                                          color: _textColor(context),
                                           fontWeight: FontWeight.w700,
                                         ),
                                   ),
@@ -196,30 +217,47 @@ class _InsightsScreenState extends State<InsightsScreen> {
                       ? Text(
                           'No merchant data available for this month.',
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: _mutedTextColor),
+                              ?.copyWith(color: _mutedTextColor(context)),
                         )
-                      : Column(
-                          children: analytics.topMerchants.map((merchant) {
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                merchant.merchant,
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: _textColor,
-                                      fontWeight: FontWeight.w600,
+                      : SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: analytics.topMerchants.map((merchant) {
+                              return Container(
+                                margin: const EdgeInsets.only(right: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _softAccentSurface(context),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      merchant.merchant,
+                                      style: Theme.of(context).textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: _textColor(context),
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
-                              ),
-                              trailing: Text(
-                                '₹${merchant.total.toStringAsFixed(0)}',
-                                style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(
-                                      color: _textColor,
-                                      fontWeight: FontWeight.w700,
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '₹${merchant.total.toStringAsFixed(0)}',
+                                      style: Theme.of(context).textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: _textColor(context),
+                                            fontWeight: FontWeight.w700,
+                                          ),
                                     ),
-                              ),
-                            );
-                          }).toList(),
+                                  ],
+                                ),
+                              );
+                            }).toList(growable: false),
+                          ),
                         ),
                 ),
               ],
@@ -247,9 +285,9 @@ class _InsightMetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9EBF2)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,7 +295,7 @@ class _InsightMetricCard extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF8B90A0),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -286,9 +324,9 @@ class _InsightSection extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE9EBF2)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,7 +334,7 @@ class _InsightSection extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF14161F),
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),

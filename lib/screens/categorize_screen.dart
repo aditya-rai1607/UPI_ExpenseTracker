@@ -68,74 +68,17 @@ class _CategorizeScreenState extends State<CategorizeScreen> {
     Navigator.of(context).pop(true);
   }
 
-  Future<void> _handleCategorySelection(dynamic itemKey, String? value) async {
-    if (value == null) {
-      return;
-    }
-
-    if (value == CategoryService.customCategoryOption) {
-      final customCategory = await _showCustomCategoryDialog();
-      if (customCategory == null) {
-        return;
-      }
-
-      await CategoryService.addCategory(customCategory);
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _selectedCategoryByKey[itemKey] = customCategory;
-      });
-      return;
-    }
-
+  void _handleCategorySelection(dynamic itemKey, String? value) {
     setState(() {
-      _selectedCategoryByKey[itemKey] = value;
+      _selectedCategoryByKey[itemKey] = value ?? '';
     });
-  }
-
-  Future<String?> _showCustomCategoryDialog() async {
-    final controller = TextEditingController();
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Custom Category'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Category name'),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(controller.text.trim());
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    controller.dispose();
-
-    final normalized = result?.trim();
-    if (normalized == null || normalized.isEmpty) {
-      return null;
-    }
-    return normalized;
   }
 
   @override
   Widget build(BuildContext context) {
-    final categories = CategoryService.getDropdownCategories();
+    final categories = CategoryService.getDropdownCategoriesForType(
+      TransactionType.debit,
+    );
 
     final items = _loadUncategorizedDebits();
 

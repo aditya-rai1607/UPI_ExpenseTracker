@@ -8,8 +8,6 @@ class TransactionTile extends StatelessWidget {
 
   static const Color _incomeColor = Color(0xFF22C55E);
   static const Color _expenseColor = Color(0xFFEF4444);
-  static const Color _textColor = Color(0xFF111827);
-  static const Color _secondaryTextColor = Color(0xFF6B7280);
   static const Color _primaryColor = Color(0xFF6C63FF);
 
   final TransactionModel transaction;
@@ -17,6 +15,10 @@ class TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).colorScheme.onSurface;
+    final secondaryTextColor = Theme.of(context).colorScheme.onSurfaceVariant;
+    final cardColor = Theme.of(context).cardColor;
     final isDebit = transaction.type == TransactionType.debit;
     final signedSymbol = isDebit ? '-' : '+';
     final amountColor = isDebit ? _expenseColor : _incomeColor;
@@ -37,15 +39,18 @@ class TransactionTile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cardColor,
             borderRadius: BorderRadius.circular(22),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x120F172A),
-                blurRadius: 22,
-                offset: Offset(0, 10),
-              ),
-            ],
+            boxShadow: isDark
+                ? const <BoxShadow>[]
+                : const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x120F172A),
+                      blurRadius: 22,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+            border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Row(
             children: <Widget>[
@@ -54,7 +59,7 @@ class TransactionTile extends StatelessWidget {
                 height: 52,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: _avatarBackground(categoryLabel),
+                  color: _avatarBackground(categoryLabel, isDark),
                 ),
                 child: Icon(
                   _categoryIcon(categoryLabel, isDebit),
@@ -74,7 +79,7 @@ class TransactionTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium
-                                ?.copyWith(fontSize: 16, color: _textColor),
+                                ?.copyWith(fontSize: 16, color: textColor),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -99,7 +104,7 @@ class TransactionTile extends StatelessWidget {
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   fontSize: 12,
-                                  color: _secondaryTextColor,
+                                  color: secondaryTextColor,
                                 ),
                           ),
                         ),
@@ -112,7 +117,7 @@ class TransactionTile extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: _secondaryTextColor),
+                                  ?.copyWith(color: secondaryTextColor),
                             ),
                           ),
                         ],
@@ -128,11 +133,11 @@ class TransactionTile extends StatelessWidget {
     );
   }
 
-  Color _avatarBackground(String categoryLabel) {
+  Color _avatarBackground(String categoryLabel, bool isDark) {
     if (categoryLabel == 'Income') {
-      return const Color(0xFFEAFBF0);
+      return isDark ? const Color(0xFF133123) : const Color(0xFFEAFBF0);
     }
-    return const Color(0xFFF1F3FF);
+    return isDark ? const Color(0xFF1A2233) : const Color(0xFFF1F3FF);
   }
 
   IconData _categoryIcon(String categoryLabel, bool isDebit) {

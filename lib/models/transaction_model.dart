@@ -1,8 +1,10 @@
 import 'package:uuid/uuid.dart';
 
-enum TransactionType { debit, credit }
+enum TransactionType { debit, credit, investment }
 
 class TransactionModel {
+  static const Object _unset = Object();
+
   TransactionModel({
     String? id,
     required this.amount,
@@ -27,7 +29,7 @@ class TransactionModel {
   final DateTime createdAt;
 
   bool get needsCategory =>
-      type == TransactionType.debit &&
+      type != TransactionType.credit &&
       (category == null ||
           category!.trim().isEmpty ||
           category == 'Uncategorized');
@@ -53,7 +55,7 @@ class TransactionModel {
     double? amount,
     String? merchant,
     String? bankRemark,
-    String? category,
+    Object? category = _unset,
     DateTime? date,
     TransactionType? type,
     String? note,
@@ -64,7 +66,7 @@ class TransactionModel {
       amount: amount ?? this.amount,
       merchant: merchant ?? this.merchant,
       bankRemark: bankRemark ?? this.bankRemark,
-      category: category ?? this.category,
+      category: identical(category, _unset) ? this.category : category as String?,
       date: date ?? this.date,
       type: type ?? this.type,
       note: note ?? this.note,
@@ -89,9 +91,11 @@ class TransactionModel {
 
   static TransactionModel fromMap(Map<dynamic, dynamic> map) {
     final rawType = (map['type']?.toString().toLowerCase() ?? 'debit').trim();
-    final parsedType = rawType == 'credit'
-        ? TransactionType.credit
-        : TransactionType.debit;
+    final parsedType = switch (rawType) {
+      'credit' => TransactionType.credit,
+      'investment' => TransactionType.investment,
+      _ => TransactionType.debit,
+    };
 
     final parsedDate =
         DateTime.tryParse(map['date']?.toString() ?? '') ?? DateTime.now();

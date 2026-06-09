@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -15,7 +17,7 @@ import 'insights_screen.dart';
 import 'more_screen.dart';
 import 'transaction_detail_screen.dart';
 
-enum TransactionFilter { all, debit, credit, uncategorizedDebit }
+enum TransactionFilter { all, debit, credit, investment, uncategorizedDebit }
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -27,8 +29,31 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   static const Color _primaryColor = Color(0xFF6C63FF);
   static const Color _expenseColor = Color(0xFFEF4444);
-  static const Color _secondaryTextColor = Color(0xFF6B7280);
-  static const Color _textColor = Color(0xFF111827);
+  static const Color _incomeColor = Color(0xFF16A34A);
+
+  Color _secondaryTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  Color _textColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+  Color _surfaceColor(BuildContext context) => Theme.of(context).cardColor;
+  Color _borderColor(BuildContext context) => Theme.of(context).dividerColor;
+  Color _softAccentSurface(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF20263A)
+        : const Color(0xFFEDEDFB);
+  }
+
+  Color _softIconSurface(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF1A2233)
+        : const Color(0xFFF1F3FF);
+  }
+
+  Color _pillSurface(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF1A2233)
+        : const Color(0xFFF7F8FC);
+  }
 
   TransactionFilter _filter = TransactionFilter.all;
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -70,9 +95,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return transaction.type == TransactionType.debit;
       case TransactionFilter.credit:
         return transaction.type == TransactionType.credit;
+      case TransactionFilter.investment:
+        return transaction.type == TransactionType.investment;
       case TransactionFilter.uncategorizedDebit:
-        return transaction.type == TransactionType.debit &&
-            transaction.needsCategory;
+        return transaction.needsCategory;
       case TransactionFilter.all:
         return true;
     }
@@ -106,25 +132,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _isToday(DateTime date) {
     final now = DateTime.now();
-    return date.year == now.year && date.month == now.month && date.day == now.day;
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
   }
 
   Future<void> _openInsightsScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const InsightsScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const InsightsScreen()));
   }
 
   Future<void> _openMoreScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const MoreScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const MoreScreen()));
   }
 
   Future<void> _openAllTransactionsScreen() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AllTransactionsScreen()),
     );
+  }
+
+  double _displayExpenseTotal(MonthlyAnalytics analytics) {
+    return analytics.totalExpense;
   }
 
   @override
@@ -145,12 +177,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 .where((item) => _matchesFilter(item.transaction))
                 .toList();
             final todaysTransactions = filteredTransactions
-              .where((item) => _isToday(item.transaction.date))
-              .toList();
+                .where((item) => _isToday(item.transaction.date))
+                .toList();
             final uncategorizedCount = storedTransactions
-              .where((item) => item.transaction.type == TransactionType.debit)
-              .where((item) => item.transaction.needsCategory)
-              .length;
+                .where((item) => item.transaction.type == TransactionType.debit)
+                .where((item) => item.transaction.needsCategory)
+                .length;
             final analytics = AnalyticsService.calculateMonthlyAnalytics(
               transactions: transactions,
               month: _selectedMonth,
@@ -161,20 +193,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: <Widget>[
                 _buildTopBar(),
                 const SizedBox(height: 18),
-                const Divider(height: 1, color: Color(0xFFF0F1F6)),
+                Divider(height: 1, color: _borderColor(context)),
                 const SizedBox(height: 18),
                 _buildHeroCopy(context, uncategorizedCount),
                 const SizedBox(height: 20),
                 _buildSummaryCard(context, analytics, lastBackupAt),
                 const SizedBox(height: 22),
                 _buildCategoryChart(context, analytics),
+                const SizedBox(height: 18),
+                _buildMonthlyTrendChart(context, transactions),
                 const SizedBox(height: 20),
                 _buildFilterBar(context),
                 const SizedBox(height: 18),
-                _buildRecentActivityHeader(
-                  context,
-                  todaysTransactions.length,
-                ),
+                _buildRecentActivityHeader(context, todaysTransactions.length),
                 const SizedBox(height: 12),
                 if (todaysTransactions.isEmpty)
                   _buildEmptyState(context)
@@ -212,12 +243,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTopBar() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: <Widget>[
         Text(
           'logo',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: _textColor,
+            color: _textColor(context),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -226,10 +258,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: _textColor,
+            color: isDark ? const Color(0xFF1A2233) : _textColor(context),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.bolt_rounded, color: Colors.white, size: 18),
+          child: Icon(
+            Icons.bolt_rounded,
+            color: isDark ? _textColor(context) : Colors.white,
+            size: 18,
+          ),
         ),
         const Spacer(),
         CircleAvatar(
@@ -239,7 +275,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Container(
               color: const Color(0xFFD7DCEB),
               alignment: Alignment.center,
-              child: const Icon(Icons.person, color: _textColor, size: 18),
+              child: Icon(Icons.person, color: _textColor(context), size: 18),
             ),
           ),
         ),
@@ -248,18 +284,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeroCopy(BuildContext context, int uncategorizedCount) {
+    final subtitle = uncategorizedCount > 0
+        ? 'You have some new uncategoried finances.'
+        : 'Your finances are looking healthy.';
+
     return Row(
       children: <Widget>[
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text('Hey Aditya!', style: Theme.of(context).textTheme.headlineSmall),
+              Text(
+                'Hey Aditya!',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               const SizedBox(height: 4),
               Text(
-                'Your finances are looking healthy.',
+                subtitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: _secondaryTextColor,
+                  color: _secondaryTextColor(context),
                 ),
               ),
             ],
@@ -272,9 +315,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _TopActionButton(
               onTap: _openCategorizeScreen,
               tooltip: 'Review uncategorized transactions',
-              child: const Icon(
+              child: Icon(
                 Icons.notifications_none_rounded,
-                color: _textColor,
+                color: _textColor(context),
               ),
             ),
             if (uncategorizedCount > 0)
@@ -282,11 +325,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 top: -4,
                 right: -2,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: _expenseColor,
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: Colors.white, width: 2),
+                    border: Border.all(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      width: 2,
+                    ),
                   ),
                   child: Text(
                     uncategorizedCount > 9 ? '9+' : '$uncategorizedCount',
@@ -308,11 +357,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     MonthlyAnalytics analytics,
     DateTime? lastBackupAt,
   ) {
+    final displayExpenseTotal = _displayExpenseTotal(analytics);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: const Color(0xFFEDEDFB),
+        color: _softAccentSurface(context),
         boxShadow: const <BoxShadow>[
           BoxShadow(
             color: Color(0x140F172A),
@@ -327,16 +378,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             'TOTAL EXPENSES',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF7378AF),
+              color: _secondaryTextColor(context),
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0,
             ),
           ),
           const SizedBox(height: 10),
           Text(
-            '₹${analytics.totalExpense.toStringAsFixed(2)}',
+            '₹${displayExpenseTotal.toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: _textColor,
+              color: _expenseColor,
               fontSize: 34,
             ),
           ),
@@ -348,18 +399,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.south_west_rounded,
                   label: 'INCOME',
                   value: analytics.totalIncome,
-                  valueColor: _textColor,
-                  labelColor: _secondaryTextColor,
+                  valueColor: _incomeColor,
+                  labelColor: _textColor(context),
                 ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: _SummaryMetricCard(
-                  icon: Icons.north_east_rounded,
-                  label: 'CASHFLOW',
-                  value: analytics.netCashflow,
-                  valueColor: _textColor,
-                  labelColor: _expenseColor,
+                  icon: Icons.savings_rounded,
+                  label: 'SAVINGS',
+                  value: analytics.totalInvestment,
+                  valueColor: _textColor(context),
+                  labelColor: _incomeColor,
                 ),
               ),
             ],
@@ -369,7 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               'Last backup ${DateFormat('dd MMM, hh:mm a').format(lastBackupAt.toLocal())}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: _secondaryTextColor,
+                color: _secondaryTextColor(context),
               ),
             ),
           ],
@@ -379,15 +430,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCategoryChart(BuildContext context, MonthlyAnalytics analytics) {
-    final sortedEntries = analytics.expenseByCategory.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final breakdown = _buildCategoryBreakdown(analytics.expenseByCategory);
+    final displayExpenseTotal = _displayExpenseTotal(analytics);
 
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: _surfaceColor(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(22, 22, 22, 26),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -407,65 +458,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              height: 250,
-              child: analytics.expenseByCategory.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No expense data for this month',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _secondaryTextColor,
-                        ),
-                      ),
-                    )
-                  : Stack(
-                      alignment: Alignment.center,
-                      children: <Widget>[
-                        PieChart(
-                          PieChartData(
-                            sectionsSpace: 6,
-                            centerSpaceRadius: 68,
-                            sections: _buildCategorySections(
-                              analytics.expenseByCategory,
-                            ),
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text(
-                              'TOTAL',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: _secondaryTextColor,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '₹${_formatCompactAmount(analytics.totalExpense)}',
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(color: _textColor),
-                            ),
-                          ],
-                        ),
-                      ],
+            if (analytics.expenseByCategory.isEmpty)
+              SizedBox(
+                height: 220,
+                child: Center(
+                  child: Text(
+                    'No expense data for this month',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: _secondaryTextColor(context),
                     ),
-            ),
-            if (sortedEntries.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: List<Widget>.generate(sortedEntries.length, (index) {
-                  final entry = sortedEntries[index];
-                  return _LegendChip(
-                    label: entry.key,
-                    color: _chartColorForIndex(index),
-                  );
-                }),
+                  ),
+                ),
+              )
+            else
+              _CategoryPieChart(
+                breakdown: breakdown,
+                totalExpenseLabel:
+                    '₹${_formatCompactAmount(displayExpenseTotal)}',
+                sectionBuilder: _buildCategorySections,
               ),
-            ],
           ],
         ),
       ),
@@ -482,6 +493,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildFilterChip(context, TransactionFilter.debit, 'Debits'),
           const SizedBox(width: 10),
           _buildFilterChip(context, TransactionFilter.credit, 'Credits'),
+          const SizedBox(width: 10),
+          _buildFilterChip(
+            context,
+            TransactionFilter.investment,
+            'Investments',
+          ),
           const SizedBox(width: 10),
           _buildFilterChip(
             context,
@@ -508,15 +525,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _filter = filter;
         });
       },
-      backgroundColor: Colors.white,
+      backgroundColor: _surfaceColor(context),
       selectedColor: _primaryColor,
       labelStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: selected ? Colors.white : _secondaryTextColor,
+        color: selected ? Colors.white : _secondaryTextColor(context),
         fontWeight: FontWeight.w700,
       ),
-      side: BorderSide(
-        color: selected ? _primaryColor : const Color(0xFFE5E7EB),
-      ),
+      side: BorderSide(color: selected ? _primaryColor : _borderColor(context)),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
     );
@@ -529,12 +544,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text('Recent Activity', style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Recent Activity',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 4),
               Text(
                 '$count transactions today',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: _secondaryTextColor,
+                  color: _secondaryTextColor(context),
                 ),
               ),
             ],
@@ -554,11 +572,159 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildMonthlyTrendChart(
+    BuildContext context,
+    List<TransactionModel> transactions,
+  ) {
+    final trends = AnalyticsService.calculateMonthlyTrends(
+      transactions: transactions,
+      endMonth: _selectedMonth,
+      monthCount: 5,
+    );
+    final maxValue = trends.fold<double>(
+      0,
+      (max, item) => math.max(max, math.max(item.income, item.expense)),
+    );
+
+    return Card(
+      elevation: 0,
+      color: _surfaceColor(context),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'Income vs Expense',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Last 5 months',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _secondaryTextColor(context),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 240,
+              child: BarChart(
+                BarChartData(
+                  barTouchData: BarTouchData(
+                    enabled: true,
+                    touchTooltipData: BarTouchTooltipData(
+                      tooltipBgColor: const Color(0xCC111827),
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final label = rodIndex == 0 ? 'Income' : 'Expense';
+                        return BarTooltipItem(
+                          '$label\n₹${rod.toY.toStringAsFixed(0)}',
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  maxY: maxValue == 0 ? 100 : maxValue * 1.2,
+                  alignment: BarChartAlignment.spaceAround,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: maxValue == 0
+                        ? 25
+                        : (maxValue * 1.2) / 4,
+                    getDrawingHorizontalLine: (_) =>
+                        FlLine(color: _borderColor(context), strokeWidth: 1),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 44,
+                        getTitlesWidget: (value, meta) => Text(
+                          '₹${(value / 1000).toStringAsFixed(value >= 1000 ? 0 : 1)}k',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: _secondaryTextColor(context)),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.toInt();
+                          if (index < 0 || index >= trends.length) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              DateFormat('MMM').format(trends[index].month),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: _secondaryTextColor(context),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: List<BarChartGroupData>.generate(trends.length, (
+                    index,
+                  ) {
+                    final trend = trends[index];
+                    return BarChartGroupData(
+                      x: index,
+                      barsSpace: 6,
+                      barRods: <BarChartRodData>[
+                        BarChartRodData(
+                          toY: trend.income,
+                          width: 10,
+                          color: _incomeColor,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        BarChartRodData(
+                          toY: trend.expense,
+                          width: 10,
+                          color: _expenseColor,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ],
+                    );
+                  }),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                _ChartLegendDot(color: _incomeColor, label: 'Income'),
+                const SizedBox(width: 16),
+                _ChartLegendDot(color: _expenseColor, label: 'Expense'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceColor(context),
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
@@ -567,7 +733,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F3FF),
+              color: _softIconSurface(context),
               borderRadius: BorderRadius.circular(18),
             ),
             child: const Icon(Icons.receipt_long_rounded, color: _primaryColor),
@@ -582,7 +748,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Try another filter or check View All for older activity.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: _secondaryTextColor,
+              color: _secondaryTextColor(context),
             ),
           ),
         ],
@@ -590,26 +756,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  List<PieChartSectionData> _buildCategorySections(
+  List<_CategoryBreakdownItem> _buildCategoryBreakdown(
     Map<String, double> expenseByCategory,
   ) {
-    final entries = expenseByCategory.entries.toList()
+    final sortedEntries = expenseByCategory.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final entries = sortedEntries.length <= 8
+        ? sortedEntries
+        : <MapEntry<String, double>>[
+            ...sortedEntries.take(7),
+            MapEntry<String, double>(
+              'Other',
+              sortedEntries
+                  .skip(7)
+                  .fold<double>(0, (sum, entry) => sum + entry.value),
+            ),
+          ];
     final total = entries.fold<double>(0, (sum, entry) => sum + entry.value);
-    return List<PieChartSectionData>.generate(entries.length, (index) {
+
+    return List<_CategoryBreakdownItem>.generate(entries.length, (index) {
       final entry = entries[index];
-      final percentage = total == 0 ? 0 : (entry.value / total) * 100;
+      final percentage = total == 0
+          ? 0.0
+          : ((entry.value / total) * 100).toDouble();
+      return _CategoryBreakdownItem(
+        label: entry.key,
+        value: entry.value,
+        percentage: percentage,
+        color: _chartColorForIndex(index),
+      );
+    });
+  }
+
+  List<PieChartSectionData> _buildCategorySections(
+    List<_CategoryBreakdownItem> breakdown,
+    double radius,
+  ) {
+    return List<PieChartSectionData>.generate(breakdown.length, (index) {
+      final entry = breakdown[index];
       return PieChartSectionData(
         value: entry.value,
-        color: _chartColorForIndex(index),
-        radius: 58,
-        title: '${percentage.round()}%',
-        titlePositionPercentageOffset: 0.72,
-        titleStyle: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
+        color: entry.color,
+        radius: radius,
+        title: '',
       );
     });
   }
@@ -650,6 +839,7 @@ class _TopActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -659,8 +849,13 @@ class _TopActionButton extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isDark ? const Color(0xFF1A2233) : Colors.white,
             borderRadius: BorderRadius.circular(19),
+            border: Border.all(
+              color: isDark
+                  ? const Color(0xFF2A3140)
+                  : const Color(0xFFE9EBF2),
+            ),
           ),
           child: Center(child: child),
         ),
@@ -682,10 +877,15 @@ class _MonthPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F8FC),
+        color: isDark ? const Color(0xFF1A2233) : const Color(0xFFF7F8FC),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2A3140) : const Color(0xFFE5E7EB),
+        ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
@@ -693,20 +893,28 @@ class _MonthPill extends StatelessWidget {
         children: <Widget>[
           GestureDetector(
             onTap: onPrevious,
-            child: const Icon(Icons.chevron_left_rounded, size: 18),
+            child: Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: onSurface,
+            ),
           ),
           const SizedBox(width: 4),
           Text(
             DateFormat('MMM yyyy').format(selectedMonth),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF6B7280),
+              color: onSurface,
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(width: 4),
           GestureDetector(
             onTap: onNext,
-            child: const Icon(Icons.chevron_right_rounded, size: 18),
+            child: Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: onSurface,
+            ),
           ),
         ],
       ),
@@ -731,11 +939,17 @@ class _SummaryMetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
+        color: isDark
+            ? const Color(0xFF121827)
+            : Colors.white.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2A3140) : Colors.transparent,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -756,14 +970,279 @@ class _SummaryMetricCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '₹${value.toStringAsFixed(2)}',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: valueColor,
-              fontSize: 18,
+            '₹${value.abs().toStringAsFixed(2)}',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: valueColor, fontSize: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChartLegendDot extends StatelessWidget {
+  const _ChartLegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryBreakdownItem {
+  const _CategoryBreakdownItem({
+    required this.label,
+    required this.value,
+    required this.percentage,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final double percentage;
+  final Color color;
+}
+
+class _CategoryPieChart extends StatelessWidget {
+  const _CategoryPieChart({
+    required this.breakdown,
+    required this.totalExpenseLabel,
+    required this.sectionBuilder,
+  });
+
+  final List<_CategoryBreakdownItem> breakdown;
+  final String totalExpenseLabel;
+  final List<PieChartSectionData> Function(List<_CategoryBreakdownItem>, double)
+  sectionBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 720;
+        final chartSize = isCompact
+            ? math.min(constraints.maxWidth * 0.56, 220.0)
+            : math.min(constraints.maxWidth * 0.32, 210.0);
+        final sectionRadius = chartSize * 0.34;
+
+        final chart = SizedBox(
+          width: chartSize,
+          height: chartSize,
+          child: Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              PieChart(
+                PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 4,
+                  centerSpaceRadius: chartSize * 0.26,
+                  sections: sectionBuilder(breakdown, sectionRadius),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    'TOTAL',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    totalExpenseLabel,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+
+        final details = _CategoryDetailsPanel(items: breakdown);
+
+        if (isCompact) {
+          return Column(
+            children: <Widget>[
+              Center(child: chart),
+              const SizedBox(height: 18),
+              details,
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            chart,
+            const SizedBox(width: 18),
+            Expanded(child: details),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CategoryDetailsPanel extends StatelessWidget {
+  const _CategoryDetailsPanel({required this.items});
+
+  final List<_CategoryBreakdownItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final splitIndex = (items.length / 2).ceil();
+    final leftColumnItems = items.take(splitIndex).toList(growable: false);
+    final rightColumnItems = items.skip(splitIndex).toList(growable: false);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1A2233)
+            : const Color(0xFFFBFBFE),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'DETAIL & PERCENTAGES',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  children: leftColumnItems
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _CategoryMetricRow(item: item),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+              if (rightColumnItems.isNotEmpty) const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  children: rightColumnItems
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _CategoryMetricRow(item: item),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Total Categories: ${items.length}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CategoryMetricRow extends StatelessWidget {
+  const _CategoryMetricRow({required this.item});
+
+  final _CategoryBreakdownItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: item.color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              color: item.color,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${item.percentage.toStringAsFixed(1)}%',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -779,7 +1258,9 @@ class _LegendChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FD),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1A2233)
+            : const Color(0xFFF8F9FD),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -821,7 +1302,7 @@ class _DashboardBottomBar extends StatelessWidget {
     return BottomAppBar(
       elevation: 14,
       shadowColor: const Color(0x140F172A),
-      color: Colors.white,
+      color: Theme.of(context).bottomAppBarTheme.color,
       shape: const CircularNotchedRectangle(),
       notchMargin: 8,
       child: SizedBox(
@@ -872,7 +1353,9 @@ class _BottomBarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF6C63FF) : const Color(0xFF6B7280);
+    final color = selected
+        ? const Color(0xFF6C63FF)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),

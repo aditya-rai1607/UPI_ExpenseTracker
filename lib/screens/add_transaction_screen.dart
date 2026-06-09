@@ -14,14 +14,23 @@ class AddTransactionScreen extends StatefulWidget {
 }
 
 class _AddTransactionScreenState extends State<AddTransactionScreen> {
-  static const Color _backgroundColor = Color(0xFFF6F7FB);
-  static const Color _surfaceColor = Colors.white;
   static const Color _heroColor = Color(0xFF16171D);
-  static const Color _textColor = Color(0xFF14161F);
-  static const Color _mutedTextColor = Color(0xFF8B90A0);
-  static const Color _softBorderColor = Color(0xFFE9EBF2);
   static const Color _incomeColor = Color(0xFF22C55E);
   static const Color _expenseColor = Color(0xFFEF4444);
+  static const Color _investmentColor = Color(0xFFD97706);
+
+  Color _backgroundColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _surfaceColor(BuildContext context) => Theme.of(context).cardColor;
+  Color _textColor(BuildContext context) => Theme.of(context).colorScheme.onSurface;
+  Color _mutedTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  Color _softBorderColor(BuildContext context) => Theme.of(context).dividerColor;
+  Color _softIconSurface(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF1A2233)
+        : const Color(0xFFF6F7FB);
+  }
 
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
@@ -68,13 +77,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     final amount = double.parse(_amountController.text.trim());
     final merchant = _merchantController.text.trim();
     final suggestion = TransactionParser.suggestCategory(merchant);
+    final resolvedCategory = _type == TransactionType.debit
+        ? (_category ?? suggestion)
+        : _category;
 
     final transaction = TransactionModel(
       amount: amount,
       merchant: merchant,
-      category: _type == TransactionType.debit
-          ? (_category ?? suggestion)
-          : null,
+      category: resolvedCategory,
       date: _date,
       type: _type,
       note: _noteController.text.trim().isEmpty
@@ -91,79 +101,26 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
     Navigator.of(context).pop(true);
   }
 
-  Future<void> _handleCategorySelection(String? value) async {
-    if (value == null) {
-      return;
-    }
-
-    if (value == CategoryService.customCategoryOption) {
-      final customCategory = await _showCustomCategoryDialog();
-      if (customCategory == null) {
-        return;
-      }
-
-      await CategoryService.addCategory(customCategory);
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _category = customCategory;
-      });
-      return;
-    }
-
+  void _handleCategorySelection(String? value) {
     setState(() {
       _category = value;
     });
   }
 
-  Future<String?> _showCustomCategoryDialog() async {
-    final controller = TextEditingController();
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Custom Category'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Category name'),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(controller.text.trim());
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
-
-    controller.dispose();
-
-    final normalized = result?.trim();
-    if (normalized == null || normalized.isEmpty) {
-      return null;
-    }
-    return normalized;
-  }
-
   Color _transactionTypeColor() {
-    return _type == TransactionType.credit ? _incomeColor : _expenseColor;
+    return switch (_type) {
+      TransactionType.credit => _incomeColor,
+      TransactionType.investment => _investmentColor,
+      TransactionType.debit => _expenseColor,
+    };
   }
 
   String _heroCaption() {
-    return _type == TransactionType.credit
-        ? 'Enter incoming amount'
-        : 'Enter expense amount';
+    return switch (_type) {
+      TransactionType.credit => 'Enter incoming amount',
+      TransactionType.investment => 'Track your investment amount',
+      TransactionType.debit => 'Enter expense amount',
+    };
   }
 
   Widget _buildHeroCard(BuildContext context) {
@@ -222,6 +179,21 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ],
                     ),
                   ),
+                  DropdownMenuItem(
+                    value: TransactionType.investment,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          Icons.trending_up_rounded,
+                          size: 14,
+                          color: _investmentColor,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Investment'),
+                      ],
+                    ),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value == null) {
@@ -229,9 +201,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   }
                   setState(() {
                     _type = value;
-                    if (_type == TransactionType.credit) {
-                      _category = null;
-                    }
+                    _category = null;
                   });
                 },
               ),
@@ -303,9 +273,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
         child: Ink(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: _surfaceColor,
+            color: _surfaceColor(context),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _softBorderColor),
+            border: Border.all(color: _softBorderColor(context)),
             boxShadow: const <BoxShadow>[
               BoxShadow(
                 color: Color(0x080F172A),
@@ -321,10 +291,10 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF6F7FB),
+                  color: _softIconSurface(context),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, size: 18, color: _textColor),
+                child: Icon(icon, size: 18, color: _textColor(context)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -334,7 +304,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     Text(
                       label,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: _mutedTextColor,
+                        color: _mutedTextColor(context),
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
                       ),
@@ -364,14 +334,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       validator: validator,
       textCapitalization: textCapitalization,
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: _textColor,
+        color: _textColor(context),
         fontWeight: FontWeight.w700,
       ),
       decoration: InputDecoration(
         isDense: true,
         hintText: hintText,
         hintStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: _mutedTextColor,
+          color: _mutedTextColor(context),
           fontWeight: FontWeight.w500,
         ),
         border: InputBorder.none,
@@ -386,19 +356,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = CategoryService.getDropdownCategories();
+    final categories = CategoryService.getDropdownCategoriesForType(_type);
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: _backgroundColor(context),
       appBar: AppBar(
-        backgroundColor: _backgroundColor,
+        backgroundColor: _backgroundColor(context),
         elevation: 0,
         scrolledUnderElevation: 0,
         titleSpacing: 0,
         title: Text(
           'Add Transaction',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: _textColor,
+            color: _textColor(context),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -428,38 +398,36 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (_type == TransactionType.debit) ...<Widget>[
-                _buildInfoCard(
-                  context: context,
-                  icon: Icons.label_outline_rounded,
-                  label: 'CATEGORY',
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: CategoryService.normalizeSelectedCategory(_category),
-                      isExpanded: true,
-                      icon: const Icon(
-                        Icons.chevron_right_rounded,
-                        color: _mutedTextColor,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: _textColor,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      items: categories
-                          .map(
-                            (category) => DropdownMenuItem<String>(
-                              value: category,
-                              child: Text(category),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _handleCategorySelection,
+              _buildInfoCard(
+                context: context,
+                icon: Icons.label_outline_rounded,
+                label: 'CATEGORY',
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: CategoryService.normalizeSelectedCategory(_category),
+                    isExpanded: true,
+                    icon: Icon(
+                      Icons.chevron_right_rounded,
+                      color: _mutedTextColor(context),
                     ),
+                    borderRadius: BorderRadius.circular(16),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: _textColor(context),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    items: categories
+                        .map(
+                          (category) => DropdownMenuItem<String>(
+                            value: category,
+                            child: Text(category),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _handleCategorySelection,
                   ),
                 ),
-                const SizedBox(height: 12),
-              ],
+              ),
+              const SizedBox(height: 12),
               _buildInfoCard(
                 context: context,
                 icon: Icons.calendar_today_outlined,
@@ -471,14 +439,14 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       child: Text(
                         DateFormat('dd MMM yyyy').format(_date),
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: _textColor,
+                          color: _textColor(context),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.chevron_right_rounded,
-                      color: _mutedTextColor,
+                      color: _mutedTextColor(context),
                     ),
                   ],
                 ),

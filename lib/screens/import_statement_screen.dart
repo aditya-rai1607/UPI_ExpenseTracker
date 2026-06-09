@@ -16,17 +16,23 @@ class ImportStatementScreen extends StatefulWidget {
 }
 
 class _ImportStatementScreenState extends State<ImportStatementScreen> {
-  static const Color _backgroundColor = Color(0xFFF6F7FB);
-  static const Color _surfaceColor = Colors.white;
   static const Color _heroColor = Color(0xFF16171D);
   static const Color _primaryColor = Color(0xFF6C63FF);
   static const Color _expenseColor = Color(0xFFEF4444);
   static const Color _successColor = Color(0xFF22C55E);
   static const Color _warningColor = Color(0xFFF59E0B);
-  static const Color _secondaryTextColor = Color(0xFF6B7280);
-  static const Color _textColor = Color(0xFF14161F);
-  static const Color _mutedTextColor = Color(0xFF8B90A0);
-  static const Color _softBorderColor = Color(0xFFE9EBF2);
+
+  Color _backgroundColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _surfaceColor(BuildContext context) => Theme.of(context).cardColor;
+  Color _secondaryTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  Color _textColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+  Color _mutedTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  Color _softBorderColor(BuildContext context) =>
+      Theme.of(context).dividerColor;
 
   List<TransactionModel> _parsedTransactions = <TransactionModel>[];
   int _skippedRows = 0;
@@ -208,19 +214,22 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
   }
 
   Widget _buildSectionCard({required Widget child, EdgeInsets? padding}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: padding ?? const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _surfaceColor,
+        color: _surfaceColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _softBorderColor),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x080F172A),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
+        border: Border.all(color: _softBorderColor(context)),
+        boxShadow: isDark
+            ? const <BoxShadow>[]
+            : const <BoxShadow>[
+                BoxShadow(
+                  color: Color(0x080F172A),
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ],
       ),
       child: child,
     );
@@ -228,13 +237,14 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
 
   Widget _buildUploadSection(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Text(
           'Upload File',
           style: textTheme.titleSmall?.copyWith(
-            color: _textColor,
+            color: _textColor(context),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -247,10 +257,16 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
               borderRadius: BorderRadius.circular(18),
               child: Ink(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 22,
+                ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD8D8DB),
+                  color: isDark
+                      ? const Color(0xFF1A2233)
+                      : const Color(0xFFD8D8DB),
                   borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _softBorderColor(context)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -258,13 +274,15 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                     Container(
                       width: 54,
                       height: 54,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFBBBBBF),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF2A3140)
+                            : const Color(0xFFBBBBBF),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.upload_file_outlined,
-                        color: _heroColor,
+                        color: _textColor(context),
                         size: 28,
                       ),
                     ),
@@ -273,7 +291,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                       _isParsing ? 'Parsing file...' : 'Select XLS / XLSX File',
                       textAlign: TextAlign.center,
                       style: textTheme.titleSmall?.copyWith(
-                        color: _heroColor,
+                        color: _textColor(context),
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -282,21 +300,26 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                       _fileName ?? 'Maximum file size: 10MB',
                       textAlign: TextAlign.center,
                       style: textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF494C55),
+                        color: _secondaryTextColor(context),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 14),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F2F5),
+                        color: isDark
+                            ? const Color(0xFF121827)
+                            : const Color(0xFFF1F2F5),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
                         'Supported files: XLS, XLSX',
                         style: textTheme.labelSmall?.copyWith(
-                          color: _secondaryTextColor,
+                          color: _secondaryTextColor(context),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -313,6 +336,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
 
   Widget _buildStatusSection(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -321,7 +345,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
             Text(
               'Processing Status',
               style: textTheme.titleSmall?.copyWith(
-                color: _textColor,
+                color: _textColor(context),
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -334,20 +358,20 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                   : Icons.timelapse_rounded,
               size: 14,
               color: _isParsing
-                  ? _secondaryTextColor
+                  ? _secondaryTextColor(context)
                   : _hasParsedFile
                   ? _successColor
-                  : _secondaryTextColor,
+                  : _secondaryTextColor(context),
             ),
             const SizedBox(width: 4),
             Text(
               _statusText,
               style: textTheme.labelSmall?.copyWith(
                 color: _isParsing
-                    ? _secondaryTextColor
+                    ? _secondaryTextColor(context)
                     : _hasParsedFile
                     ? _successColor
-                    : _secondaryTextColor,
+                    : _secondaryTextColor(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -364,18 +388,19 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          _fileName ?? 'Bank_Statement_May_2026.xlsx',
-                          style: textTheme.titleSmall?.copyWith(
-                            color: _textColor,
-                            fontWeight: FontWeight.w700,
+                        if (_fileName != null)
+                          Text(
+                            _fileName!,
+                            style: textTheme.titleSmall?.copyWith(
+                              color: _textColor(context),
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
+                        if (_fileName != null) const SizedBox(height: 4),
                         Text(
                           _fileSubtitle(),
                           style: textTheme.bodySmall?.copyWith(
-                            color: _secondaryTextColor,
+                            color: _secondaryTextColor(context),
                           ),
                         ),
                       ],
@@ -385,7 +410,9 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                   Text(
                     _qualityLabel,
                     style: textTheme.titleSmall?.copyWith(
-                      color: _hasParsedFile ? _successColor : _textColor,
+                      color: _hasParsedFile
+                          ? _successColor
+                          : _textColor(context),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -397,7 +424,9 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                 child: LinearProgressIndicator(
                   value: _isParsing ? null : _statusProgress,
                   minHeight: 7,
-                  backgroundColor: const Color(0xFFF1F2F5),
+                  backgroundColor: isDark
+                      ? const Color(0xFF121827)
+                      : const Color(0xFFF1F2F5),
                   valueColor: AlwaysStoppedAnimation<Color>(
                     _hasParsedFile ? _successColor : _primaryColor,
                   ),
@@ -406,16 +435,25 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
               const SizedBox(height: 12),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: _hasParsedFile
-                      ? const Color(0xFFEFFAF3)
-                      : const Color(0xFFF8F9FD),
+                      ? (isDark
+                            ? const Color(0xFF103321)
+                            : const Color(0xFFEFFAF3))
+                      : (isDark
+                            ? const Color(0xFF121827)
+                            : const Color(0xFFF8F9FD)),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: _hasParsedFile
-                        ? const Color(0xFFC9EDD3)
-                        : const Color(0xFFE9EBF2),
+                        ? (isDark
+                              ? const Color(0xFF1D5A35)
+                              : const Color(0xFFC9EDD3))
+                        : _softBorderColor(context),
                   ),
                 ),
                 child: Row(
@@ -425,7 +463,9 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                           ? Icons.task_alt_rounded
                           : Icons.info_outline_rounded,
                       size: 18,
-                      color: _hasParsedFile ? _successColor : _secondaryTextColor,
+                      color: _hasParsedFile
+                          ? _successColor
+                          : _secondaryTextColor(context),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -433,8 +473,10 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                         _successSummary,
                         style: textTheme.bodySmall?.copyWith(
                           color: _hasParsedFile
-                              ? const Color(0xFF166534)
-                              : _secondaryTextColor,
+                              ? (isDark
+                                    ? const Color(0xFF9FE3BA)
+                                    : const Color(0xFF166534))
+                              : _secondaryTextColor(context),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -476,10 +518,20 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
               if (_duplicateRows > 0) ...<Widget>[
                 const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF6E8),
+                    color: isDark
+                        ? const Color(0xFF3D2D12)
+                        : const Color(0xFFFFF6E8),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF5F461E)
+                          : const Color(0xFFFFE4BA),
+                    ),
                   ),
                   child: Row(
                     children: <Widget>[
@@ -493,7 +545,9 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                         child: Text(
                           '$_duplicateRows possible duplicates will be skipped during import.',
                           style: textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF8A5A00),
+                            color: isDark
+                                ? const Color(0xFFF3D7A6)
+                                : const Color(0xFF8A5A00),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -518,7 +572,7 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
           Text(
             'HOW TO IMPORT',
             style: textTheme.labelMedium?.copyWith(
-              color: _mutedTextColor,
+              color: _mutedTextColor(context),
               fontWeight: FontWeight.w800,
               letterSpacing: 0.7,
             ),
@@ -551,17 +605,18 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = _backgroundColor(context);
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: _backgroundColor,
+        backgroundColor: backgroundColor,
         elevation: 0,
         scrolledUnderElevation: 0,
         titleSpacing: 0,
         title: Text(
           'Import Statement',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            color: _textColor,
+            color: _textColor(context),
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -583,9 +638,11 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
-              decoration: const BoxDecoration(
-                color: _backgroundColor,
-                border: Border(top: BorderSide(color: Color(0xFFEDEEF4))),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border(
+                  top: BorderSide(color: _softBorderColor(context)),
+                ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -601,9 +658,8 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        textStyle: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       icon: _isImporting
                           ? const SizedBox(
@@ -624,8 +680,12 @@ class _ImportStatementScreenState extends State<ImportStatementScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextButton(
-                    onPressed: _isImporting ? null : () => Navigator.of(context).maybePop(),
-                    style: TextButton.styleFrom(foregroundColor: _secondaryTextColor),
+                    onPressed: _isImporting
+                        ? null
+                        : () => Navigator.of(context).maybePop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: _secondaryTextColor(context),
+                    ),
                     child: const Text('Cancel and Return to Dashboard'),
                   ),
                 ],
@@ -653,11 +713,13 @@ class _ImportMetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FD),
+        color: isDark ? const Color(0xFF121827) : const Color(0xFFF8F9FD),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,7 +729,7 @@ class _ImportMetricTile extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: const Color(0xFF14161F),
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -675,7 +737,7 @@ class _ImportMetricTile extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF8B90A0),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -698,6 +760,7 @@ class _InstructionStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -705,8 +768,8 @@ class _InstructionStep extends StatelessWidget {
           width: 22,
           height: 22,
           alignment: Alignment.center,
-          decoration: const BoxDecoration(
-            color: Color(0xFF16171D),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1A2233) : const Color(0xFF16171D),
             shape: BoxShape.circle,
           ),
           child: Text(
@@ -725,7 +788,7 @@ class _InstructionStep extends StatelessWidget {
               Text(
                 title,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF14161F),
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -733,7 +796,7 @@ class _InstructionStep extends StatelessWidget {
               Text(
                 description,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF6B7280),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                   height: 1.45,
                 ),
               ),
