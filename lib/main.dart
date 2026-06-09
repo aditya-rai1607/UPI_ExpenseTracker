@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -5,6 +7,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/app_settings_service.dart';
 import 'services/category_service.dart';
+import 'services/notification_service.dart';
+import 'services/sms_listener_service.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +20,15 @@ void main() async {
   await Hive.openBox(CategoryService.categoriesBoxName);
   await Hive.openBox(CategoryService.merchantRulesBoxName);
   await CategoryService.ensureDefaults();
+
+  // Initialise notification service (registers tap-to-navigate handler).
+  await NotificationService.init(appNavigatorKey);
+
+  // Resume SMS listening if the user already granted permission previously.
+  if (Platform.isAndroid) {
+    final alreadyGranted = await SmsListenerService.isPermissionGranted();
+    if (alreadyGranted) SmsListenerService.startListening();
+  }
 
   runApp(const MyApp());
 }
@@ -95,6 +110,7 @@ class MyApp extends StatelessWidget {
       valueListenable: settingsBox.listenable(),
       builder: (context, _, __) {
         return MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'UPI Expense Tracker',
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),

@@ -1,13 +1,66 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/transaction_model.dart';
 import '../services/app_settings_service.dart';
+import '../services/sms_listener_service.dart';
 import 'category_settings_screen.dart';
-import 'style_settings_screen.dart';
 
-class MoreScreen extends StatelessWidget {
+class MoreScreen extends StatefulWidget {
   const MoreScreen({super.key});
+
+  @override
+  State<MoreScreen> createState() => _MoreScreenState();
+}
+
+class _MoreScreenState extends State<MoreScreen> {
+  bool _smsEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshSmsState();
+  }
+
+  Future<void> _refreshSmsState() async {
+    final granted = await SmsListenerService.isPermissionGranted();
+    if (mounted) setState(() => _smsEnabled = granted);
+  }
+
+  Future<void> _toggleSms(bool value) async {
+    if (!Platform.isAndroid) return;
+    if (value) {
+      final granted = await SmsListenerService.requestPermissions();
+      if (granted) {
+        SmsListenerService.startListening();
+        if (mounted) setState(() => _smsEnabled = true);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'SMS permission denied. Grant it in Android Settings to enable auto-detect.',
+              ),
+            ),
+          );
+        }
+      }
+    } else {
+      // SMS listening cannot be stopped programmatically once started;
+      // inform the user to revoke via system settings.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'To stop SMS auto-detect, revoke the SMS permission in Android Settings.',
+            ),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _openCategorySettings(
     BuildContext context,
@@ -19,22 +72,6 @@ class MoreScreen extends StatelessWidget {
         builder: (_) => CategorySettingsScreen(title: title, type: type),
       ),
     );
-  }
-
-  Future<void> _openStyleSettings(BuildContext context) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const StyleSettingsScreen()),
-    );
-  }
-
-  String _styleSubtitle(BuildContext context) {
-    return switch (AppSettingsService.getThemeMode()) {
-      ThemeMode.system => MediaQuery.platformBrightnessOf(context) == Brightness.dark
-          ? 'System Mode · Dark'
-          : 'System Mode · Light',
-      ThemeMode.dark => 'Dark Mode',
-      ThemeMode.light => 'Light Mode',
-    };
   }
 
   @override
@@ -102,10 +139,25 @@ class MoreScreen extends StatelessWidget {
                     const _MoreItemData(title: 'Currency Setting'),
                     const _MoreItemData(title: 'Transaction Setting'),
                     _MoreItemData(
-                      title: 'Style',
-                      subtitle: _styleSubtitle(context),
-                      onTap: () => _openStyleSettings(context),
+                      title: 'Dark Mode',
+                      isToggle: true,
+                      toggleValue:
+                          AppSettingsService.getThemeMode() == ThemeMode.dark,
+                      onToggleChanged: (value) {
+                        AppSettingsService.setThemeMode(
+                          value ? ThemeMode.dark : ThemeMode.light,
+                        );
+                      },
                     ),
+                    if (Platform.isAndroid)
+                      _MoreItemData(
+                        title: 'SMS Auto-detect',
+                        subtitle:
+                            'Automatically add bank transactions from SMS',
+                        isToggle: true,
+                        toggleValue: _smsEnabled,
+                        onToggleChanged: _toggleSms,
+                      ),
                     const _MoreItemData(title: 'Language Setting'),
                   ],
                 ),
@@ -168,8 +220,18 @@ class _MoreItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final trailing = item.isToggle
+        ? Switch.adaptive(
+            value: item.toggleValue,
+            onChanged: item.onToggleChanged,
+          )
+        : Icon(
+            Icons.chevron_right_rounded,
+            color: _MoreScreenStateColors.mutedTextColor(context),
+          );
+
     return ListTile(
-      onTap: item.onTap,
+      onTap: item.isToggle ? null : item.onTap,
       contentPadding: EdgeInsets.zero,
       title: Text(
         item.title,
@@ -186,20 +248,27 @@ class _MoreItem extends StatelessWidget {
                 color: _MoreScreenStateColors.mutedTextColor(context),
               ),
             ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: _MoreScreenStateColors.mutedTextColor(context),
-      ),
+      trailing: trailing,
     );
   }
 }
 
 class _MoreItemData {
-  const _MoreItemData({required this.title, this.subtitle, this.onTap});
+  const _MoreItemData({
+    required this.title,
+    this.subtitle,
+    this.onTap,
+    this.isToggle = false,
+    this.toggleValue = false,
+    this.onToggleChanged,
+  });
 
   final String title;
   final String? subtitle;
   final VoidCallback? onTap;
+  final bool isToggle;
+  final bool toggleValue;
+  final ValueChanged<bool>? onToggleChanged;
 }
 
 class _MoreScreenStateColors {

@@ -179,6 +179,7 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
     final tempCategories = _selectedCategories.toSet();
     DateTime? tempFromDate = _fromDate;
     DateTime? tempToDate = _toDate;
+    _TransactionViewFilter tempFilter = _filter;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -235,6 +236,53 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                             ),
                       ),
                       const SizedBox(height: 16),
+                      Text(
+                        'More transaction types',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: <Widget>[
+                          ChoiceChip(
+                            label: const Text('Investment'),
+                            selected:
+                                tempFilter == _TransactionViewFilter.investment,
+                            showCheckmark: false,
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) {
+                                  tempFilter =
+                                      _TransactionViewFilter.investment;
+                                } else {
+                                  tempFilter = _TransactionViewFilter.all;
+                                }
+                              });
+                            },
+                          ),
+                          ChoiceChip(
+                            label: const Text('Uncategorized'),
+                            selected:
+                                tempFilter ==
+                                _TransactionViewFilter.uncategorized,
+                            showCheckmark: false,
+                            onSelected: (selected) {
+                              setModalState(() {
+                                if (selected) {
+                                  tempFilter =
+                                      _TransactionViewFilter.uncategorized;
+                                } else {
+                                  tempFilter = _TransactionViewFilter.all;
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
                       Text(
                         'Categories',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -314,6 +362,7 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                             child: OutlinedButton(
                               onPressed: () {
                                 setState(() {
+                                  _filter = _TransactionViewFilter.all;
                                   _selectedCategories = <String>{};
                                   _fromDate = null;
                                   _toDate = null;
@@ -328,6 +377,7 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                             child: FilledButton(
                               onPressed: () {
                                 setState(() {
+                                  _filter = tempFilter;
                                   _selectedCategories = tempCategories;
                                   _fromDate = tempFromDate;
                                   _toDate = tempToDate;
@@ -377,6 +427,7 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
         child: ValueListenableBuilder(
           valueListenable: box.listenable(),
           builder: (context, Box<dynamic> box, _) {
+            final isMobile = MediaQuery.sizeOf(context).width < 600;
             final allTransactions = _readStoredTransactions(box);
             final categories = _availableCategories(allTransactions);
             final transactions = _applyFilters(allTransactions);
@@ -435,18 +486,6 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                         ),
                         const SizedBox(width: 10),
                         _FilterChip(
-                          label: 'Investment',
-                          selected:
-                              _filter == _TransactionViewFilter.investment,
-                          mutedTextColor: _mutedTextColor(context),
-                          surfaceColor: _surfaceColor(context),
-                          borderColor: _softBorderColor(context),
-                          onTap: () => setState(
-                            () => _filter = _TransactionViewFilter.investment,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        _FilterChip(
                           label: 'Debited',
                           selected: _filter == _TransactionViewFilter.debited,
                           mutedTextColor: _mutedTextColor(context),
@@ -457,18 +496,33 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        _FilterChip(
-                          label: 'Uncategorized',
-                          selected:
-                              _filter == _TransactionViewFilter.uncategorized,
-                          mutedTextColor: _mutedTextColor(context),
-                          surfaceColor: _surfaceColor(context),
-                          borderColor: _softBorderColor(context),
-                          onTap: () => setState(
-                            () =>
-                                _filter = _TransactionViewFilter.uncategorized,
+                        if (!isMobile) ...<Widget>[
+                          const SizedBox(width: 10),
+                          _FilterChip(
+                            label: 'Investment',
+                            selected:
+                                _filter == _TransactionViewFilter.investment,
+                            mutedTextColor: _mutedTextColor(context),
+                            surfaceColor: _surfaceColor(context),
+                            borderColor: _softBorderColor(context),
+                            onTap: () => setState(
+                              () => _filter = _TransactionViewFilter.investment,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          _FilterChip(
+                            label: 'Uncategorized',
+                            selected:
+                                _filter == _TransactionViewFilter.uncategorized,
+                            mutedTextColor: _mutedTextColor(context),
+                            surfaceColor: _surfaceColor(context),
+                            borderColor: _softBorderColor(context),
+                            onTap: () => setState(
+                              () => _filter =
+                                  _TransactionViewFilter.uncategorized,
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 10),
                         _FilterChip(
                           label: 'Filters',
@@ -479,7 +533,9 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
                           selected:
                               _selectedCategories.isNotEmpty ||
                               _fromDate != null ||
-                              _toDate != null,
+                              _toDate != null ||
+                              _filter == _TransactionViewFilter.investment ||
+                              _filter == _TransactionViewFilter.uncategorized,
                           onTap: () => _openAdvancedFilters(categories),
                         ),
                       ],

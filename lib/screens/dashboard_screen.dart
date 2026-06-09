@@ -179,12 +179,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final todaysTransactions = filteredTransactions
                 .where((item) => _isToday(item.transaction.date))
                 .toList();
+            final recentTransactions = todaysTransactions.isNotEmpty
+              ? todaysTransactions
+              : filteredTransactions.take(5).toList(growable: false);
+            final isRecentFallbackUsed =
+              todaysTransactions.isEmpty && recentTransactions.isNotEmpty;
             final uncategorizedCount = storedTransactions
                 .where((item) => item.transaction.type == TransactionType.debit)
                 .where((item) => item.transaction.needsCategory)
                 .length;
             final analytics = AnalyticsService.calculateMonthlyAnalytics(
               transactions: transactions,
+              month: _selectedMonth,
+            );
+            final totalInvestmentAllTime = transactions
+                .where((item) => item.type == TransactionType.investment)
+                .fold<double>(0, (sum, item) => sum + item.amount);
+            final totalInvestmentByCategory = _buildInvestmentByCategory(
+              transactions,
+            );
+            final monthInvestmentByCategory = _buildInvestmentByCategory(
+              transactions,
               month: _selectedMonth,
             );
 
@@ -197,7 +212,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 18),
                 _buildHeroCopy(context, uncategorizedCount),
                 const SizedBox(height: 20),
-                _buildSummaryCard(context, analytics, lastBackupAt),
+                _buildSummarySection(
+                  context,
+                  analytics,
+                  totalInvestmentAllTime,
+                  totalInvestmentByCategory,
+                  monthInvestmentByCategory,
+                  lastBackupAt,
+                ),
                 const SizedBox(height: 22),
                 _buildCategoryChart(context, analytics),
                 const SizedBox(height: 18),
@@ -205,12 +227,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 20),
                 _buildFilterBar(context),
                 const SizedBox(height: 18),
-                _buildRecentActivityHeader(context, todaysTransactions.length),
+                _buildRecentActivityHeader(
+                  context,
+                  recentTransactions.length,
+                  usingFallback: isRecentFallbackUsed,
+                ),
                 const SizedBox(height: 12),
-                if (todaysTransactions.isEmpty)
+                if (recentTransactions.isEmpty)
                   _buildEmptyState(context)
                 else
-                  ...todaysTransactions.map(
+                  ...recentTransactions.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: TransactionTile(
@@ -352,15 +378,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSummaryCard(
+  Widget _buildSummarySection(
+    BuildContext context,
+    MonthlyAnalytics analytics,
+    double totalInvestmentAllTime,
+    Map<String, double> totalInvestmentByCategory,
+    Map<String, double> monthInvestmentByCategory,
+    DateTime? lastBackupAt,
+  ) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isCompact = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 1100;
+    if (isCompact || isTablet) {
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Expanded(
+              child: _buildExpenseCard(context, analytics, lastBackupAt),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildInvestmentCard(
+                context,
+                totalInvestmentAllTime,
+                analytics.totalInvestment,
+                totalInvestmentByCategory,
+                monthInvestmentByCategory,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Expanded(
+          flex: 2,
+          child: _buildExpenseCard(context, analytics, lastBackupAt),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: _buildInvestmentCard(
+            context,
+            totalInvestmentAllTime,
+            analytics.totalInvestment,
+            totalInvestmentByCategory,
+            monthInvestmentByCategory,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildExpenseCard(
     BuildContext context,
     MonthlyAnalytics analytics,
     DateTime? lastBackupAt,
   ) {
     final displayExpenseTotal = _displayExpenseTotal(analytics);
+    final savingsAmount = analytics.totalIncome - analytics.totalExpense;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         color: _softAccentSurface(context),
@@ -376,47 +458,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            'TOTAL EXPENSES',
+            'MONTH\'S EXPENSES',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: _secondaryTextColor(context),
               fontWeight: FontWeight.w700,
               letterSpacing: 1.0,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             '₹${displayExpenseTotal.toStringAsFixed(2)}',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               color: _expenseColor,
-              fontSize: 34,
+              fontSize: 28,
             ),
           ),
-          const SizedBox(height: 18),
-          Row(
-            children: <Widget>[
-              Expanded(
-                child: _SummaryMetricCard(
-                  icon: Icons.south_west_rounded,
-                  label: 'INCOME',
-                  value: analytics.totalIncome,
-                  valueColor: _incomeColor,
-                  labelColor: _textColor(context),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _SummaryMetricCard(
-                  icon: Icons.savings_rounded,
-                  label: 'SAVINGS',
-                  value: analytics.totalInvestment,
-                  valueColor: _textColor(context),
-                  labelColor: _incomeColor,
-                ),
-              ),
-            ],
+          const SizedBox(height: 12),
+          _SummaryMetricCard(
+            icon: Icons.south_west_rounded,
+            label: 'INCOME',
+            value: analytics.totalIncome,
+            valueColor: _incomeColor,
+            labelColor: _textColor(context),
+          ),
+          const SizedBox(height: 10),
+          _SummaryMetricCard(
+            icon: Icons.savings_rounded,
+            label: 'SAVINGS',
+            value: savingsAmount,
+            valueColor: _textColor(context),
+            labelColor: _incomeColor,
+            showSigned: true,
           ),
           if (lastBackupAt != null) ...<Widget>[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               'Last backup ${DateFormat('dd MMM, hh:mm a').format(lastBackupAt.toLocal())}',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -427,6 +502,212 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildInvestmentCard(
+    BuildContext context,
+    double totalInvestment,
+    double monthInvestment,
+    Map<String, double> totalInvestmentByCategory,
+    Map<String, double> monthInvestmentByCategory,
+  ) {
+    final totalSummary = _buildInvestmentSummary(totalInvestmentByCategory);
+    final monthSummary = _buildInvestmentSummary(monthInvestmentByCategory);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InkWell(
+      onTap: _openInsightsScreen,
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: isDark ? const Color(0xFF18304A) : const Color(0xFFD6EEFF),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x120F172A),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'TOTAL INVESTMENTS',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _textColor(context),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '₹${totalInvestment.toStringAsFixed(2)}',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: _incomeColor,
+                fontWeight: FontWeight.w700,
+                fontSize: 28,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              totalSummary,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _textColor(context),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Icon(
+              Icons.north_east_rounded,
+              color: _textColor(context),
+              size: 26,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF274865) : const Color(0xFFB7DEFF),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'This Month\'s\nInvestment',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: _textColor(context),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '₹${monthInvestment.toStringAsFixed(2)}',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: _incomeColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          monthSummary,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: _textColor(context),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFFD7E6F3) : const Color(0xFFEAF2FA),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(
+                      Icons.bar_chart_rounded,
+                      color: isDark ? const Color(0xFF24455C) : const Color(0xFF4B728F),
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'Click to view details',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: _textColor(context),
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _buildInvestmentSummary(Map<String, double> categories) {
+    final normalized = <String, double>{
+      'Stocks': 0,
+      'Mutual Funds': 0,
+      'Gold': 0,
+      'Others': 0,
+    };
+
+    for (final entry in categories.entries) {
+      final key = _normalizeInvestmentCategory(entry.key);
+      normalized.update(
+        key,
+        (value) => value + entry.value,
+        ifAbsent: () => entry.value,
+      );
+    }
+
+    return 'Stocks: ${normalized['Stocks']!.toStringAsFixed(0)}   '
+        'Mutual Funds: ${normalized['Mutual Funds']!.toStringAsFixed(0)}   '
+        'Gold: ${normalized['Gold']!.toStringAsFixed(0)}   '
+        'Others: ${normalized['Others']!.toStringAsFixed(0)}';
+  }
+
+  String _normalizeInvestmentCategory(String category) {
+    final value = category.trim().toLowerCase();
+    if (value.contains('stock')) {
+      return 'Stocks';
+    }
+    if (value.contains('mutual')) {
+      return 'Mutual Funds';
+    }
+    if (value.contains('gold')) {
+      return 'Gold';
+    }
+    return 'Others';
+  }
+
+  Map<String, double> _buildInvestmentByCategory(
+    List<TransactionModel> transactions, {
+    DateTime? month,
+  }) {
+    final result = <String, double>{};
+    for (final transaction in transactions) {
+      if (transaction.type != TransactionType.investment) {
+        continue;
+      }
+      if (month != null &&
+          (transaction.date.year != month.year ||
+              transaction.date.month != month.month)) {
+        continue;
+      }
+      final category = (transaction.category ?? '').trim().isEmpty
+          ? 'Uncategorized'
+          : transaction.category!.trim();
+      result.update(
+        category,
+        (value) => value + transaction.amount,
+        ifAbsent: () => transaction.amount,
+      );
+    }
+    return result;
   }
 
   Widget _buildCategoryChart(BuildContext context, MonthlyAnalytics analytics) {
@@ -484,27 +765,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildFilterBar(BuildContext context) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: <Widget>[
           _buildFilterChip(context, TransactionFilter.all, 'All'),
           const SizedBox(width: 10),
-          _buildFilterChip(context, TransactionFilter.debit, 'Debits'),
+          _buildFilterChip(context, TransactionFilter.credit, 'Credited'),
           const SizedBox(width: 10),
-          _buildFilterChip(context, TransactionFilter.credit, 'Credits'),
-          const SizedBox(width: 10),
-          _buildFilterChip(
-            context,
-            TransactionFilter.investment,
-            'Investments',
-          ),
-          const SizedBox(width: 10),
-          _buildFilterChip(
-            context,
-            TransactionFilter.uncategorizedDebit,
-            'Uncategorized',
-          ),
+          _buildFilterChip(context, TransactionFilter.debit, 'Debited'),
+          if (!isMobile) ...<Widget>[
+            const SizedBox(width: 10),
+            _buildFilterChip(
+              context,
+              TransactionFilter.investment,
+              'Investments',
+            ),
+            const SizedBox(width: 10),
+            _buildFilterChip(
+              context,
+              TransactionFilter.uncategorizedDebit,
+              'Uncategorized',
+            ),
+          ],
         ],
       ),
     );
@@ -537,7 +821,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivityHeader(BuildContext context, int count) {
+  Widget _buildRecentActivityHeader(
+    BuildContext context,
+    int count, {
+    required bool usingFallback,
+  }) {
+    final subtitle = usingFallback
+        ? 'Showing latest $count transactions'
+        : '$count transactions today';
     return Row(
       children: <Widget>[
         Expanded(
@@ -550,7 +841,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                '$count transactions today',
+                subtitle,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: _secondaryTextColor(context),
                 ),
@@ -929,6 +1220,7 @@ class _SummaryMetricCard extends StatelessWidget {
     required this.value,
     required this.valueColor,
     required this.labelColor,
+    this.showSigned = false,
   });
 
   final IconData icon;
@@ -936,10 +1228,14 @@ class _SummaryMetricCard extends StatelessWidget {
   final double value;
   final Color valueColor;
   final Color labelColor;
+  final bool showSigned;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final displayValue = showSigned
+        ? '${value > 0 ? '+' : value < 0 ? '-' : ''}₹${value.abs().toStringAsFixed(2)}'
+        : '₹${value.abs().toStringAsFixed(2)}';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -964,16 +1260,19 @@ class _SummaryMetricCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: labelColor,
                   fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            '₹${value.abs().toStringAsFixed(2)}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(color: valueColor, fontSize: 18),
+            displayValue,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: valueColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
           ),
         ],
       ),
