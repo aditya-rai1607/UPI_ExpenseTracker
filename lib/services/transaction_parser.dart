@@ -5,7 +5,10 @@ class TransactionParser {
   );
 
   static double extractAmount(String text) {
-    final regex = RegExp(r'₹?\s?([\d,]+\.?\d*)');
+    final regex = RegExp(
+      r'(?:Rs\.?|INR|₹)\s*([\d,]+\.?\d*)',
+      caseSensitive: false,
+    );
     final match = regex.firstMatch(text);
 
     if (match != null) {
@@ -20,6 +23,9 @@ class TransactionParser {
     if (text == null) return '';
     final raw = text.trim();
     if (raw.isEmpty) return '';
+
+    final fromParty = _extractCreditedFromParty(raw);
+    if (fromParty.isNotEmpty) return fromParty;
 
     // Common separators in bank remarks
     final parts = raw
@@ -57,7 +63,10 @@ class TransactionParser {
     }
 
     // Heuristic: pick the first token that looks like a merchant name (not keywords like bank, paid, crd)
-    final blacklist = RegExp(r'bank|paid|via|crd|deb|ref|utr', caseSensitive: false);
+    final blacklist = RegExp(
+      r'bank|paid|via|crd|deb|ref|utr',
+      caseSensitive: false,
+    );
     for (final token in parts) {
       if (!blacklist.hasMatch(token) && token.length >= 3) {
         return token;
@@ -65,13 +74,51 @@ class TransactionParser {
     }
 
     // Fallback: try the older "to/at/paid to" pattern
-    final regex = RegExp(r'(?:to|at|paid to)\s([A-Za-z][A-Za-z\s.&-]+)', caseSensitive: false);
+    final regex = RegExp(
+      r'(?:to|at|paid to)\s([A-Za-z][A-Za-z\s.&-]+)',
+      caseSensitive: false,
+    );
     final match = regex.firstMatch(raw);
     if (match != null) {
       return match.group(1)!.trim();
     }
 
     return '';
+  }
+
+  static String _extractCreditedFromParty(String raw) {
+    final lower = raw.toLowerCase();
+    if (!lower.contains('credited')) return '';
+
+    final fromMatch = RegExp(
+      r'\bfrom\s+([^\n\r.,;]+)',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (fromMatch == null) return '';
+
+    var candidate = fromMatch.group(1)?.trim() ?? '';
+    if (candidate.isEmpty) return '';
+
+    candidate = candidate
+        .replaceAll(RegExp(r'\bUPI\b.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bIMPS\b.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bNEFT\b.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bRTGS\b.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bRef\b.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (candidate.isEmpty) return '';
+
+    final looksLikeAccountToken = RegExp(
+      r'^(?:a\/c|acct|account|ac|xx+|x+|\d|no\b)',
+      caseSensitive: false,
+    ).hasMatch(candidate);
+    final onlySymbolsOrDigits = RegExp(r'^[\d\W_]+$').hasMatch(candidate);
+
+    if (looksLikeAccountToken || onlySymbolsOrDigits) return '';
+
+    return candidate;
   }
 
   static String suggestCategory(String merchant) {

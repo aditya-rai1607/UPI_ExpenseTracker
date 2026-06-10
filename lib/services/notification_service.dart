@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../models/transaction_model.dart';
 import '../screens/transaction_detail_screen.dart';
@@ -17,6 +18,11 @@ class NotificationService {
   static const _channelName = 'Bank Transactions';
   static const _channelDesc =
       'Alerts for bank transactions detected from incoming SMS';
+
+  static Future<bool> isNotificationPermissionGranted() async {
+    final status = await Permission.notification.status;
+    return status.isGranted;
+  }
 
   /// Full initialisation for the foreground app. Sets up navigation so that
   /// tapping a notification opens the relevant [TransactionDetailScreen].
@@ -56,6 +62,8 @@ class NotificationService {
     TransactionModel transaction,
     dynamic hiveKey,
   ) async {
+    if (!await isNotificationPermissionGranted()) return;
+
     final typeLabel = transaction.type == TransactionType.credit
         ? 'Credited'
         : 'Debited';
@@ -72,13 +80,17 @@ class NotificationService {
       icon: '@mipmap/ic_launcher',
     );
 
-    await _plugin.show(
-      hiveKey.hashCode & 0x7FFFFFFF, // keep within int32 range
-      '₹${transaction.amount.toStringAsFixed(2)} $typeLabel',
-      '$merchantLabel — tap to categorize',
-      const NotificationDetails(android: androidDetails),
-      payload: hiveKey.toString(),
-    );
+    try {
+      await _plugin.show(
+        hiveKey.hashCode & 0x7FFFFFFF, // keep within int32 range
+        '₹${transaction.amount.toStringAsFixed(2)} $typeLabel',
+        '$merchantLabel — tap to categorize',
+        const NotificationDetails(android: androidDetails),
+        payload: hiveKey.toString(),
+      );
+    } catch (_) {
+      // Best-effort notification; transaction is already persisted.
+    }
   }
 
   /// Handles a notification tap by navigating to [TransactionDetailScreen].

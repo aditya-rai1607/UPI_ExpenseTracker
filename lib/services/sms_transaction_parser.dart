@@ -45,23 +45,35 @@ class SmsTransactionParser {
   ///
   /// Returns `null` if no valid amount can be extracted.
   static TransactionModel? parseTransaction(String body) {
+    final parsed = parseTransactions(body);
+    if (parsed.isEmpty) return null;
+    return parsed.first;
+  }
+
+  /// Parses the [body] into one or more transactions.
+  static List<TransactionModel> parseTransactions(String body) {
     final amount = TransactionParser.extractAmount(body);
-    if (amount <= 0) return null;
+    if (amount <= 0) return const [];
 
     final merchant = TransactionParser.extractMerchant(body);
+    final normalizedMerchant = merchant.isNotEmpty ? merchant : 'Unknown';
+    final now = DateTime.now();
+
     final type = _inferType(body);
     final category = type == TransactionType.debit
         ? TransactionParser.suggestCategory(merchant)
         : null;
 
-    return TransactionModel(
-      amount: amount,
-      merchant: merchant.isNotEmpty ? merchant : 'Unknown',
-      bankRemark: body.length > 300 ? body.substring(0, 300) : body,
-      category: category,
-      date: DateTime.now(),
-      type: type,
-    );
+    return [
+      TransactionModel(
+        amount: amount,
+        merchant: normalizedMerchant,
+        bankRemark: body.length > 300 ? body.substring(0, 300) : body,
+        category: category,
+        date: now,
+        type: type,
+      ),
+    ];
   }
 
   /// Returns `true` if a transaction with the same fingerprint already exists

@@ -40,14 +40,11 @@ class TransactionModel {
     final identityPart = normalizedRemark.isNotEmpty
         ? normalizedRemark
         : normalizedMerchant;
-    return '${amount.toStringAsFixed(2)}|$identityPart';
+    return '${type.name}|${amount.toStringAsFixed(2)}|$identityPart';
   }
 
   static String _normalizeIdentityPart(String? value) {
-    return (value ?? '')
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'\s+'), ' ');
+    return (value ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   TransactionModel copyWith({
@@ -66,7 +63,9 @@ class TransactionModel {
       amount: amount ?? this.amount,
       merchant: merchant ?? this.merchant,
       bankRemark: bankRemark ?? this.bankRemark,
-      category: identical(category, _unset) ? this.category : category as String?,
+      category: identical(category, _unset)
+          ? this.category
+          : category as String?,
       date: date ?? this.date,
       type: type ?? this.type,
       note: note ?? this.note,

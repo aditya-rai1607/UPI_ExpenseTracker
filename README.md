@@ -15,3 +15,15 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Android release build
+
+This project vendors the working Android patch for `telephony` under `third_party/telephony`.
+
+Before building a release APK, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tooling\build_release_apk.ps1
+```
+
+This reapplies the Android patch to the hosted `telephony` package in pub cache and then runs the release build.

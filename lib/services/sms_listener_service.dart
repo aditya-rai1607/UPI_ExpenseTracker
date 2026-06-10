@@ -26,50 +26,60 @@ Future<void> backgroundSmsHandler(SmsMessage message) async {
 
   if (!SmsTransactionParser.isBankSms(body, sender)) return;
 
-  final transaction = SmsTransactionParser.parseTransaction(body);
-  if (transaction == null) return;
+  final transactions = SmsTransactionParser.parseTransactions(body);
+  if (transactions.isEmpty) return;
 
   // Hive must be separately initialised in every isolate.
   await Hive.initFlutter();
   final box = await Hive.openBox('transactions');
 
-  if (SmsTransactionParser.isDuplicate(transaction, box)) return;
+  for (final transaction in transactions) {
+    if (SmsTransactionParser.isDuplicate(transaction, box)) continue;
 
-  final key = await box.add(transaction.toMap());
+    final key = await box.add(transaction.toMap());
 
-  // Initialise the notification plugin directly — NavigatorKey is unavailable
-  // in a background isolate, so we use the plugin API directly here.
-  final plugin = FlutterLocalNotificationsPlugin();
-  await plugin.initialize(
-    const InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-    ),
-  );
+    // Notification should never block persistence.
+    try {
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(
+        const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        ),
+      );
 
-  final typeLabel = transaction.type == TransactionType.credit
-      ? 'Credited'
-      : 'Debited';
-  final merchantLabel = transaction.merchant.isNotEmpty
-      ? transaction.merchant
-      : 'Unknown';
+      if (!transaction.needsCategory ||
+          !await NotificationService.isNotificationPermissionGranted()) {
+        continue;
+      }
 
-  await plugin.show(
-    key.hashCode & 0x7FFFFFFF,
-    '₹${transaction.amount.toStringAsFixed(2)} $typeLabel',
-    '$merchantLabel — tap to categorize',
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'bank_txn',
-        'Bank Transactions',
-        channelDescription:
-            'Alerts for bank transactions detected from incoming SMS',
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
-      ),
-    ),
-    payload: key.toString(),
-  );
+      final typeLabel = transaction.type == TransactionType.credit
+          ? 'Credited'
+          : 'Debited';
+      final merchantLabel = transaction.merchant.isNotEmpty
+          ? transaction.merchant
+          : 'Unknown';
+
+      await plugin.show(
+        key.hashCode & 0x7FFFFFFF,
+        '₹${transaction.amount.toStringAsFixed(2)} $typeLabel',
+        '$merchantLabel — tap to categorize',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'bank_txn',
+            'Bank Transactions',
+            channelDescription:
+                'Alerts for bank transactions detected from incoming SMS',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+        payload: key.toString(),
+      );
+    } catch (_) {
+      // Ignore notification failures in background isolate.
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,17 +90,31 @@ Future<void> backgroundSmsHandler(SmsMessage message) async {
 class SmsListenerService {
   static final _telephony = Telephony.instance;
 
-  /// Requests the `RECEIVE_SMS` and `POST_NOTIFICATIONS` runtime permissions.
-  ///
-  /// Returns `true` only when both permissions are granted.
-  /// On non-Android platforms this immediately returns `false`.
+  /// Requests SMS runtime permission.
+  static Future<bool> requestSmsPermission() async {
+    if (!Platform.isAndroid) return false;
+
+    final status = await Permission.sms.request();
+    return status.isGranted;
+  }
+
+  /// Requests notification permission separately from SMS permission.
+  static Future<bool> requestNotificationPermission() async {
+    if (!Platform.isAndroid) return false;
+
+    final status = await Permission.notification.request();
+    return status.isGranted;
+  }
+
+  /// Backward-compatible helper.
   static Future<bool> requestPermissions() async {
     if (!Platform.isAndroid) return false;
 
-    final results = await [Permission.sms, Permission.notification].request();
+    final smsGranted = await requestSmsPermission();
+    if (!smsGranted) return false;
 
-    return (results[Permission.sms]?.isGranted ?? false) &&
-        (results[Permission.notification]?.isGranted ?? false);
+    await requestNotificationPermission();
+    return true;
   }
 
   /// Returns `true` if the SMS permission is already granted (no prompt shown).
@@ -117,15 +141,19 @@ class SmsListenerService {
 
     if (!SmsTransactionParser.isBankSms(body, sender)) return;
 
-    final transaction = SmsTransactionParser.parseTransaction(body);
-    if (transaction == null) return;
+    final transactions = SmsTransactionParser.parseTransactions(body);
+    if (transactions.isEmpty) return;
 
     // Hive box is already open when the app is in the foreground.
     final box = Hive.box('transactions');
 
-    if (SmsTransactionParser.isDuplicate(transaction, box)) return;
+    for (final transaction in transactions) {
+      if (SmsTransactionParser.isDuplicate(transaction, box)) continue;
 
-    final key = await box.add(transaction.toMap());
-    await NotificationService.showCategorizationPrompt(transaction, key);
+      final key = await box.add(transaction.toMap());
+      if (transaction.needsCategory) {
+        await NotificationService.showCategorizationPrompt(transaction, key);
+      }
+    }
   }
 }

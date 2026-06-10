@@ -32,10 +32,21 @@ class _MoreScreenState extends State<MoreScreen> {
   Future<void> _toggleSms(bool value) async {
     if (!Platform.isAndroid) return;
     if (value) {
-      final granted = await SmsListenerService.requestPermissions();
-      if (granted) {
+      final smsGranted = await SmsListenerService.requestSmsPermission();
+      if (smsGranted) {
         SmsListenerService.startListening();
+        final notificationGranted =
+            await SmsListenerService.requestNotificationPermission();
         if (mounted) setState(() => _smsEnabled = true);
+        if (!notificationGranted && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'SMS auto-detect is enabled. Allow notifications to get categorize alerts.',
+              ),
+            ),
+          );
+        }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +204,9 @@ class _MoreSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: _MoreScreenStateColors.surfaceColor(context),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _MoreScreenStateColors.softBorderColor(context)),
+        border: Border.all(
+          color: _MoreScreenStateColors.softBorderColor(context),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,8 +285,12 @@ class _MoreItemData {
 }
 
 class _MoreScreenStateColors {
-  static Color surfaceColor(BuildContext context) => Theme.of(context).cardColor;
-  static Color textColor(BuildContext context) => Theme.of(context).colorScheme.onSurface;
-  static Color mutedTextColor(BuildContext context) => Theme.of(context).colorScheme.onSurfaceVariant;
-  static Color softBorderColor(BuildContext context) => Theme.of(context).dividerColor;
+  static Color surfaceColor(BuildContext context) =>
+      Theme.of(context).cardColor;
+  static Color textColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+  static Color mutedTextColor(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurfaceVariant;
+  static Color softBorderColor(BuildContext context) =>
+      Theme.of(context).dividerColor;
 }
