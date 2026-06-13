@@ -153,17 +153,7 @@ class _MoreScreenState extends State<MoreScreen> {
                   items: <_MoreItemData>[
                     const _MoreItemData(title: 'Currency Setting'),
                     const _MoreItemData(title: 'Transaction Setting'),
-                    _MoreItemData(
-                      title: 'Dark Mode',
-                      isToggle: true,
-                      toggleValue:
-                          AppSettingsService.getThemeMode() == ThemeMode.dark,
-                      onToggleChanged: (value) {
-                        AppSettingsService.setThemeMode(
-                          value ? ThemeMode.dark : ThemeMode.light,
-                        );
-                      },
-                    ),
+                    // Dark Mode toggle moved to Dashboard top bar
                     if (_isAndroid)
                       _MoreItemData(
                         title: 'SMS Auto-detect',

@@ -17,6 +17,7 @@ import 'import_statement_screen.dart';
 import 'insights_screen.dart';
 import 'more_screen.dart';
 import 'transaction_detail_screen.dart';
+import '../widgets/theme_toggle.dart';
 
 String _inrFormat(double amount, {int decimalDigits = 2}) {
   return NumberFormat.currency(
@@ -56,12 +57,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF1A2233)
         : const Color(0xFFF1F3FF);
-  }
-
-  Color _pillSurface(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF1A2233)
-        : const Color(0xFFF7F8FC);
   }
 
   TransactionFilter _filter = TransactionFilter.all;
@@ -115,6 +110,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   bool _matchesFilter(TransactionModel transaction) {
     switch (_filter) {
+      case TransactionFilter.all:
+        return true;
       case TransactionFilter.debit:
         return transaction.type == TransactionType.debit;
       case TransactionFilter.credit:
@@ -122,9 +119,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case TransactionFilter.investment:
         return transaction.type == TransactionType.investment;
       case TransactionFilter.uncategorizedDebit:
-        return transaction.needsCategory;
-      case TransactionFilter.all:
-        return true;
+        return transaction.type == TransactionType.debit &&
+            (transaction.category == null ||
+                transaction.category!.trim().isEmpty);
     }
   }
 
@@ -145,142 +142,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return all;
   }
 
-  void _shiftMonth(int delta) {
-    setState(() {
-      _selectedMonth = DateTime(
-        _selectedMonth.year,
-        _selectedMonth.month + delta,
-      );
-    });
-  }
-
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
-  }
-
-  Future<void> _openInsightsScreen() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const InsightsScreen()));
-  }
-
-  Future<void> _openMoreScreen() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const MoreScreen()));
-  }
-
-  Future<void> _openAllTransactionsScreen() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AllTransactionsScreen()),
-    );
-  }
-
-  double _displayExpenseTotal(MonthlyAnalytics analytics) {
-    return analytics.totalExpense;
+  bool _isSameDay(DateTime left, DateTime right) {
+    return left.year == right.year &&
+        left.month == right.month &&
+        left.day == right.day;
   }
 
   @override
   Widget build(BuildContext context) {
-    final box = Hive.box('transactions');
-    final lastBackupAt = AppSettingsService.getLastBackupAt();
+    final transactionBox = Hive.box('transactions');
 
     return Scaffold(
-      body: SafeArea(
-        child: ValueListenableBuilder(
-          valueListenable: box.listenable(),
-          builder: (context, Box<dynamic> box, _) {
-            final storedTransactions = _readStoredTransactions(box);
-            final transactions = storedTransactions
-                .map((item) => item.transaction)
-                .toList();
-            final filteredTransactions = storedTransactions
-                .where((item) => _matchesFilter(item.transaction))
-                .toList();
-            final todaysTransactions = filteredTransactions
-                .where((item) => _isToday(item.transaction.date))
-                .toList();
-            final recentTransactions = todaysTransactions.isNotEmpty
-                ? todaysTransactions
-                : filteredTransactions.take(5).toList(growable: false);
-            final isRecentFallbackUsed =
-                todaysTransactions.isEmpty && recentTransactions.isNotEmpty;
-            final uncategorizedCount = storedTransactions
-                .where((item) => item.transaction.type == TransactionType.debit)
-                .where((item) => item.transaction.needsCategory)
-                .length;
-            final analytics = AnalyticsService.calculateMonthlyAnalytics(
-              transactions: transactions,
-              month: _selectedMonth,
-            );
-            final totalInvestmentAllTime = transactions
-                .where((item) => item.type == TransactionType.investment)
-                .fold<double>(0, (sum, item) => sum + item.amount);
-            final totalInvestmentByCategory = _buildInvestmentByCategory(
-              transactions,
-            );
-            final monthInvestmentByCategory = _buildInvestmentByCategory(
-              transactions,
-              month: _selectedMonth,
-            );
-
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 112),
-              children: <Widget>[
-                _buildTopBar(),
-                const SizedBox(height: 18),
-                Divider(height: 1, color: _borderColor(context)),
-                const SizedBox(height: 18),
-                _buildHeroCopy(context, uncategorizedCount),
-                const SizedBox(height: 20),
-                _buildSummarySection(
-                  context,
-                  analytics,
-                  totalInvestmentAllTime,
-                  totalInvestmentByCategory,
-                  monthInvestmentByCategory,
-                  lastBackupAt,
-                ),
-                const SizedBox(height: 22),
-                _buildCategoryChart(context, analytics),
-                const SizedBox(height: 18),
-                _buildMonthlyTrendChart(context, transactions),
-                const SizedBox(height: 20),
-                _buildFilterBar(context),
-                const SizedBox(height: 18),
-                _buildRecentActivityHeader(
-                  context,
-                  recentTransactions.length,
-                  usingFallback: isRecentFallbackUsed,
-                ),
-                const SizedBox(height: 12),
-                if (recentTransactions.isEmpty)
-                  _buildEmptyState(context)
-                else
-                  ...recentTransactions.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: TransactionTile(
-                        transaction: item.transaction,
-                        onTap: () => _openTransactionDetail(item),
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        automaticallyImplyLeading: false,
+        toolbarHeight: 72,
+        title: _buildTopBar(),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endDocked,
       floatingActionButton: FloatingActionButton(
-        heroTag: 'add_btn',
         onPressed: _openAddTransaction,
-        backgroundColor: _primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 12,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         child: const Icon(Icons.add, size: 28),
       ),
@@ -289,7 +170,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onImportTap: _openImportScreen,
         onMoreTap: _openMoreScreen,
       ),
+      body: ValueListenableBuilder<Box<dynamic>>(
+        valueListenable: transactionBox.listenable(),
+        builder: (context, box, _) {
+          final storedTransactions = _readStoredTransactions(box);
+          final transactions = storedTransactions
+              .map((entry) => entry.transaction)
+              .toList(growable: false);
+          final analytics = AnalyticsService.calculateMonthlyAnalytics(
+            transactions: transactions,
+            month: _selectedMonth,
+          );
+          final totalInvestmentByCategory = _buildInvestmentByCategory(
+            transactions,
+          );
+          final monthInvestmentByCategory = _buildInvestmentByCategory(
+            transactions,
+            month: _selectedMonth,
+          );
+          final uncategorizedCount = transactions.where((transaction) {
+            return transaction.type == TransactionType.debit &&
+                (transaction.category == null ||
+                    transaction.category!.trim().isEmpty);
+          }).length;
+          final filteredTransactions = storedTransactions
+              .where((entry) => _matchesFilter(entry.transaction))
+              .toList(growable: false);
+          final today = DateTime.now();
+          final todayTransactions = filteredTransactions
+              .where((entry) => _isSameDay(entry.transaction.date, today))
+              .toList(growable: false);
+          final usingFallback = todayTransactions.isEmpty;
+          final recentTransactions =
+              (usingFallback ? filteredTransactions : todayTransactions)
+                  .take(5)
+                  .toList(growable: false);
+          final lastBackupAt = AppSettingsService.getLastBackupAt();
+
+          return SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 104),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _buildHeroCopy(context, uncategorizedCount),
+                  const SizedBox(height: 20),
+                  _buildSummarySection(
+                    context,
+                    analytics,
+                    totalInvestmentByCategory.values.fold(
+                      0.0,
+                      (sum, value) => sum + value,
+                    ),
+                    totalInvestmentByCategory,
+                    monthInvestmentByCategory,
+                    lastBackupAt,
+                  ),
+                  const SizedBox(height: 18),
+                  _buildCategoryChart(context, analytics),
+                  const SizedBox(height: 18),
+                  _buildMonthlyTrendChart(context, transactions),
+                  const SizedBox(height: 18),
+                  _buildFilterBar(context),
+                  const SizedBox(height: 16),
+                  _buildRecentActivityHeader(
+                    context,
+                    recentTransactions.length,
+                    usingFallback: usingFallback,
+                  ),
+                  const SizedBox(height: 14),
+                  if (recentTransactions.isEmpty)
+                    _buildEmptyState(context)
+                  else
+                    Column(
+                      children: List<Widget>.generate(
+                        recentTransactions.length,
+                        (index) {
+                          final stored = recentTransactions[index];
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index == recentTransactions.length - 1
+                                  ? 0
+                                  : 14,
+                            ),
+                            child: TransactionTile(
+                              transaction: stored.transaction,
+                              onTap: () => _openTransactionDetail(stored),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
+  }
+
+  void _openInsightsScreen() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const InsightsScreen()));
+  }
+
+  void _openMoreScreen() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const MoreScreen()));
+  }
+
+  void _openAllTransactionsScreen() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AllTransactionsScreen()));
+  }
+
+  double _displayExpenseTotal(MonthlyAnalytics analytics) =>
+      analytics.totalExpense;
+
+  void _shiftMonth(int delta) {
+    setState(() {
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + delta,
+      );
+    });
   }
 
   Widget _buildTopBar() {
@@ -318,16 +327,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         const Spacer(),
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: const Color(0xFFE8ECF8),
-          child: ClipOval(
-            child: Container(
-              color: const Color(0xFFD7DCEB),
-              alignment: Alignment.center,
-              child: Icon(Icons.person, color: _textColor(context), size: 18),
+        Row(
+          children: [
+            const ThemeToggle(),
+            const SizedBox(width: 10),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFFE8ECF8),
+              child: ClipOval(
+                child: Container(
+                  color: const Color(0xFFD7DCEB),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.person,
+                    color: _textColor(context),
+                    size: 18,
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ],
     );
@@ -1602,38 +1621,6 @@ class _CategoryMetricRow extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _LegendChip extends StatelessWidget {
-  const _LegendChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF1A2233)
-            : const Color(0xFFF8F9FD),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
     );
   }
 }

@@ -13,7 +13,6 @@ import 'services/sms_listener_service.dart';
 import 'services/native_sms_bridge.dart';
 import 'services/sms_transaction_parser.dart';
 import 'models/transaction_model.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
