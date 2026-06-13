@@ -5,6 +5,7 @@ import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import android.os.Process
 import android.provider.Telephony
 import android.telephony.SmsMessage
@@ -44,10 +45,17 @@ class IncomingSmsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         ContextHolder.applicationContext = context.applicationContext
-        val smsList = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        val messagesGroupedByOriginatingAddress = smsList.groupBy { it.originatingAddress }
-        messagesGroupedByOriginatingAddress.forEach { group ->
-            processIncomingSms(context, group.value)
+        // Extend the receiver's execution window so we can start a foreground service
+        val pendingResult = goAsync()
+        try {
+            val smsList = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+            val messagesGroupedByOriginatingAddress = smsList.groupBy { it.originatingAddress }
+            messagesGroupedByOriginatingAddress.forEach { group ->
+                processIncomingSms(context, group.value)
+            }
+        } finally {
+            // Finish the pending result after we've dispatched work to the service
+            pendingResult.finish()
         }
     }
 
@@ -74,30 +82,22 @@ class IncomingSmsReceiver : BroadcastReceiver() {
             args[MESSAGE] = messageMap
             foregroundSmsChannel?.invokeMethod(ON_MESSAGE, args)
         } else {
-            val preferences =
-                context.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-            val disableBackground =
-                preferences.getBoolean(SHARED_PREFS_DISABLE_BACKGROUND_EXE, false)
-            if (!disableBackground) {
-                processInBackground(context, messageMap)
-            }
+            // Always run native processing regardless of Flutter background-isolate flag.
+            // The disableBackground flag only controls the old Flutter-isolate path;
+            // our native processor must run unconditionally when app is not foreground.
+            processInBackground(context, messageMap)
         }
     }
 
     private fun processInBackground(context: Context, sms: HashMap<String, Any?>) {
-        IncomingSmsHandler.apply {
-            if (!isIsolateRunning.get()) {
-                initialize(context)
-                val preferences =
-                    context.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE)
-                val backgroundCallbackHandle =
-                    preferences.getLong(SHARED_PREFS_BACKGROUND_SETUP_HANDLE, 0)
-                startBackgroundIsolate(context, backgroundCallbackHandle)
-                backgroundMessageQueue.add(sms)
-            } else {
-                executeDartCallbackInBackgroundIsolate(context, sms)
-            }
-        }
+        // Instead of initializing heavy Flutter engine work inside the BroadcastReceiver,
+        // forward the message to an app-owned ForegroundService which will keep the
+        // process alive while the Flutter isolate initializes.
+            // Process in native Kotlin: parse, dedupe, queue and show native notification.
+            val body = sms[MESSAGE_BODY] as? String
+            val sender = sms[ORIGINATING_ADDRESS] as? String
+            val timestamp = sms[TIMESTAMP] as? String
+            NativeTransactionProcessor.processAndQueue(context, body, sender, timestamp)
     }
 }
 
@@ -127,9 +127,9 @@ fun SmsMessage.toMap(): HashMap<String, Any?> {
  */
 object IncomingSmsHandler : MethodChannel.MethodCallHandler {
 
-    internal val backgroundMessageQueue =
+    val backgroundMessageQueue =
         Collections.synchronizedList(mutableListOf<HashMap<String, Any?>>())
-    internal var isIsolateRunning = AtomicBoolean(false)
+    var isIsolateRunning = AtomicBoolean(false)
 
     private lateinit var backgroundChannel: MethodChannel
     private lateinit var backgroundFlutterEngine: FlutterEngine
@@ -181,7 +181,7 @@ object IncomingSmsHandler : MethodChannel.MethodCallHandler {
     /**
      * Invoke the method on background channel to handle the message
      */
-    internal fun executeDartCallbackInBackgroundIsolate(
+    fun executeDartCallbackInBackgroundIsolate(
         context: Context,
         message: HashMap<String, Any?>
     ) {
@@ -206,7 +206,7 @@ object IncomingSmsHandler : MethodChannel.MethodCallHandler {
      *
      * Should be called before invoking any other background methods.
      */
-    internal fun initialize(context: Context) {
+    fun initialize(context: Context) {
         val flutterInjector = FlutterInjector.instance()
         flutterLoader = flutterInjector.flutterLoader()
         flutterLoader.startInitialization(context)

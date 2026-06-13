@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -14,12 +15,16 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static GlobalKey<NavigatorState>? _navigatorKey;
 
+  static bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   static const _channelId = 'bank_txn';
   static const _channelName = 'Bank Transactions';
   static const _channelDesc =
       'Alerts for bank transactions detected from incoming SMS';
 
   static Future<bool> isNotificationPermissionGranted() async {
+    if (!_isAndroid) return true;
     final status = await Permission.notification.status;
     return status.isGranted;
   }

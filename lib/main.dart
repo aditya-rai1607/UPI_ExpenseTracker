@@ -1,14 +1,19 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'screens/dashboard_screen.dart';
+import 'screens/permissions_onboarding_screen.dart';
 import 'services/app_settings_service.dart';
 import 'services/category_service.dart';
 import 'services/notification_service.dart';
 import 'services/sms_listener_service.dart';
+import 'services/native_sms_bridge.dart';
+import 'services/sms_transaction_parser.dart';
+import 'models/transaction_model.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -23,12 +28,6 @@ void main() async {
 
   // Initialise notification service (registers tap-to-navigate handler).
   await NotificationService.init(appNavigatorKey);
-
-  // Resume SMS listening if the user already granted permission previously.
-  if (Platform.isAndroid) {
-    final alreadyGranted = await SmsListenerService.isPermissionGranted();
-    if (alreadyGranted) SmsListenerService.startListening();
-  }
 
   runApp(const MyApp());
 }
@@ -59,7 +58,9 @@ class MyApp extends StatelessWidget {
         backgroundColor: isDark
             ? const Color(0xFF0F1117)
             : const Color(0xFFF8F9FD),
-        foregroundColor: isDark ? const Color(0xFFF5F7FB) : const Color(0xFF111827),
+        foregroundColor: isDark
+            ? const Color(0xFFF5F7FB)
+            : const Color(0xFF111827),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: isDark ? const Color(0xFF171B24) : Colors.white,
@@ -115,8 +116,115 @@ class MyApp extends StatelessWidget {
           theme: _buildTheme(Brightness.light),
           darkTheme: _buildTheme(Brightness.dark),
           themeMode: AppSettingsService.getThemeMode(),
-          home: const DashboardScreen(),
+          home: const _HomeSelector(),
+          routes: {
+            '/dashboard': (context) => const DashboardScreen(),
+            '/permissions': (context) => const PermissionsOnboardingScreen(),
+          },
         );
+      },
+    );
+  }
+}
+
+/// Widget that decides whether to show permissions onboarding or dashboard
+/// based on SMS permission status.
+class _HomeSelector extends StatefulWidget {
+  const _HomeSelector();
+
+  @override
+  State<_HomeSelector> createState() => _HomeSelectorState();
+}
+
+class _HomeSelectorState extends State<_HomeSelector>
+    with WidgetsBindingObserver {
+  late Future<bool> _permissionCheckFuture;
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _permissionCheckFuture = _checkAndResumeSmsListener();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _drainNativeQueue();
+    }
+  }
+
+  Future<bool> _checkAndResumeSmsListener() async {
+    if (!_isAndroid) {
+      return true; // Non-Android platforms skip permission check
+    }
+
+    // Require both SMS and notification permissions at startup.
+    final smsPermissionStatus = await Permission.sms.status;
+    final notificationPermissionStatus = await Permission.notification.status;
+
+    if (smsPermissionStatus.isGranted &&
+        notificationPermissionStatus.isGranted) {
+      // Required permissions granted; resume listener.
+      SmsListenerService.startListening();
+      // Drain any transactions processed natively while app was closed.
+      _drainNativeQueue();
+      return true;
+    }
+
+    // Any required permission missing; show onboarding.
+    return false;
+  }
+
+  Future<void> _drainNativeQueue() async {
+    try {
+      final pending = await NativeSmsBridge.getPendingTransactions();
+      if (pending.isEmpty) return;
+
+      final box = Hive.box('transactions');
+
+      for (final map in pending) {
+        try {
+          final txn = TransactionModel.fromMap(map);
+          if (SmsTransactionParser.isDuplicate(txn, box)) continue;
+
+          final key = await box.add(txn.toMap());
+          await NotificationService.showCategorizationPrompt(txn, key);
+        } catch (_) {
+          // Ignore malformed entries
+        }
+      }
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _permissionCheckFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // If SMS permission is granted, show dashboard; otherwise show onboarding
+        if (snapshot.data == true) {
+          return const DashboardScreen();
+        } else {
+          return const PermissionsOnboardingScreen();
+        }
       },
     );
   }

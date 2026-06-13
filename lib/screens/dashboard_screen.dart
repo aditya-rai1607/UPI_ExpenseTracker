@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../models/transaction_model.dart';
 import '../services/analytics_service.dart';
 import '../services/app_settings_service.dart';
+import '../services/native_sms_bridge.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
 import 'all_transactions_screen.dart';
@@ -16,6 +17,14 @@ import 'import_statement_screen.dart';
 import 'insights_screen.dart';
 import 'more_screen.dart';
 import 'transaction_detail_screen.dart';
+
+String _inrFormat(double amount, {int decimalDigits = 2}) {
+  return NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: decimalDigits,
+  ).format(amount);
+}
 
 enum TransactionFilter { all, debit, credit, investment, uncategorizedDebit }
 
@@ -57,6 +66,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   TransactionFilter _filter = TransactionFilter.all;
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+
+  @override
+  void initState() {
+    super.initState();
+    // Drain any pending native-queued transactions when the dashboard appears.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // use the shared helper to move native-queued transactions into Hive
+      // and show categorization prompts.
+      Future.microtask(
+        () =>
+            // ignore: discarded_futures
+            NativeSmsBridge.drainPendingTransactions(),
+      );
+    });
+  }
 
   Future<void> _openAddTransaction() async {
     await Navigator.of(context).push(
@@ -180,10 +204,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 .where((item) => _isToday(item.transaction.date))
                 .toList();
             final recentTransactions = todaysTransactions.isNotEmpty
-              ? todaysTransactions
-              : filteredTransactions.take(5).toList(growable: false);
+                ? todaysTransactions
+                : filteredTransactions.take(5).toList(growable: false);
             final isRecentFallbackUsed =
-              todaysTransactions.isEmpty && recentTransactions.isNotEmpty;
+                todaysTransactions.isEmpty && recentTransactions.isNotEmpty;
             final uncategorizedCount = storedTransactions
                 .where((item) => item.transaction.type == TransactionType.debit)
                 .where((item) => item.transaction.needsCategory)
@@ -389,7 +413,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isCompact = screenWidth < 600;
     final isTablet = screenWidth >= 600 && screenWidth < 1100;
-    if (isCompact || isTablet) {
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _buildExpenseCard(context, analytics, lastBackupAt),
+          const SizedBox(height: 12),
+          _buildInvestmentCard(
+            context,
+            totalInvestmentAllTime,
+            analytics.totalInvestment,
+            totalInvestmentByCategory,
+            monthInvestmentByCategory,
+          ),
+        ],
+      );
+    }
+
+    if (isTablet) {
       return IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -467,28 +508,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '₹${displayExpenseTotal.toStringAsFixed(2)}',
+            _inrFormat(displayExpenseTotal),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               color: _expenseColor,
               fontSize: 28,
             ),
           ),
           const SizedBox(height: 12),
-          _SummaryMetricCard(
-            icon: Icons.south_west_rounded,
-            label: 'INCOME',
-            value: analytics.totalIncome,
-            valueColor: _incomeColor,
-            labelColor: _textColor(context),
-          ),
-          const SizedBox(height: 10),
-          _SummaryMetricCard(
-            icon: Icons.savings_rounded,
-            label: 'SAVINGS',
-            value: savingsAmount,
-            valueColor: _textColor(context),
-            labelColor: _incomeColor,
-            showSigned: true,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: _SummaryMetricCard(
+                  icon: Icons.south_west_rounded,
+                  label: 'INCOME',
+                  value: analytics.totalIncome,
+                  valueColor: _incomeColor,
+                  labelColor: _textColor(context),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SummaryMetricCard(
+                  icon: Icons.savings_rounded,
+                  label: 'SAVINGS',
+                  value: savingsAmount,
+                  valueColor: savingsAmount < 0
+                      ? _expenseColor
+                      : _textColor(context),
+                  labelColor: const Color.fromARGB(255, 8, 118, 151),
+                  showSigned: true,
+                ),
+              ),
+            ],
           ),
           if (lastBackupAt != null) ...<Widget>[
             const SizedBox(height: 12),
@@ -544,7 +596,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              '₹${totalInvestment.toStringAsFixed(2)}',
+              _inrFormat(totalInvestment),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: _incomeColor,
                 fontWeight: FontWeight.w700,
@@ -571,7 +623,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF274865) : const Color(0xFFB7DEFF),
+                color: isDark
+                    ? const Color(0xFF274865)
+                    : const Color(0xFFB7DEFF),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -582,31 +636,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
-                          'This Month\'s\nInvestment',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _textColor(context),
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                            height: 1.3,
-                          ),
+                          'Month\'s Investment',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: _textColor(context),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.2,
+                                height: 1.3,
+                              ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '₹${monthInvestment.toStringAsFixed(2)}',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: _incomeColor,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
+                          _inrFormat(monthInvestment),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: _incomeColor,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           monthSummary,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _textColor(context),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: _textColor(context),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
                         ),
                       ],
                     ),
@@ -616,12 +673,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     width: 30,
                     height: 30,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFFD7E6F3) : const Color(0xFFEAF2FA),
+                      color: isDark
+                          ? const Color(0xFFD7E6F3)
+                          : const Color(0xFFEAF2FA),
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: Icon(
                       Icons.bar_chart_rounded,
-                      color: isDark ? const Color(0xFF24455C) : const Color(0xFF4B728F),
+                      color: isDark
+                          ? const Color(0xFF24455C)
+                          : const Color(0xFF4B728F),
                       size: 20,
                     ),
                   ),
@@ -664,10 +725,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    return 'Stocks: ${normalized['Stocks']!.toStringAsFixed(0)}   '
-        'Mutual Funds: ${normalized['Mutual Funds']!.toStringAsFixed(0)}   '
-        'Gold: ${normalized['Gold']!.toStringAsFixed(0)}   '
-        'Others: ${normalized['Others']!.toStringAsFixed(0)}';
+    final f = NumberFormat('#,##,##0', 'en_IN');
+    return 'Stocks: ${f.format(normalized['Stocks']!)}   '
+        'Mutual Funds: ${f.format(normalized['Mutual Funds']!)}   '
+        'Gold: ${f.format(normalized['Gold']!)}   '
+        'Others: ${f.format(normalized['Others']!)}';
   }
 
   String _normalizeInvestmentCategory(String category) {
@@ -1143,9 +1205,7 @@ class _TopActionButton extends StatelessWidget {
             color: isDark ? const Color(0xFF1A2233) : Colors.white,
             borderRadius: BorderRadius.circular(19),
             border: Border.all(
-              color: isDark
-                  ? const Color(0xFF2A3140)
-                  : const Color(0xFFE9EBF2),
+              color: isDark ? const Color(0xFF2A3140) : const Color(0xFFE9EBF2),
             ),
           ),
           child: Center(child: child),
@@ -1184,11 +1244,7 @@ class _MonthPill extends StatelessWidget {
         children: <Widget>[
           GestureDetector(
             onTap: onPrevious,
-            child: Icon(
-              Icons.chevron_left_rounded,
-              size: 18,
-              color: onSurface,
-            ),
+            child: Icon(Icons.chevron_left_rounded, size: 18, color: onSurface),
           ),
           const SizedBox(width: 4),
           Text(
@@ -1234,8 +1290,12 @@ class _SummaryMetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final displayValue = showSigned
-        ? '${value > 0 ? '+' : value < 0 ? '-' : ''}₹${value.abs().toStringAsFixed(2)}'
-        : '₹${value.abs().toStringAsFixed(2)}';
+        ? '${value > 0
+              ? '+'
+              : value < 0
+              ? '-'
+              : ''}${_inrFormat(value.abs())}'
+        : _inrFormat(value.abs());
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

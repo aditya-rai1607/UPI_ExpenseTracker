@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -47,8 +46,7 @@ Future<void> backgroundSmsHandler(SmsMessage message) async {
         ),
       );
 
-      if (!transaction.needsCategory ||
-          !await NotificationService.isNotificationPermissionGranted()) {
+      if (!await NotificationService.isNotificationPermissionGranted()) {
         continue;
       }
 
@@ -90,9 +88,12 @@ Future<void> backgroundSmsHandler(SmsMessage message) async {
 class SmsListenerService {
   static final _telephony = Telephony.instance;
 
+  static bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   /// Requests SMS runtime permission.
   static Future<bool> requestSmsPermission() async {
-    if (!Platform.isAndroid) return false;
+    if (!_isAndroid) return false;
 
     final status = await Permission.sms.request();
     return status.isGranted;
@@ -100,7 +101,7 @@ class SmsListenerService {
 
   /// Requests notification permission separately from SMS permission.
   static Future<bool> requestNotificationPermission() async {
-    if (!Platform.isAndroid) return false;
+    if (!_isAndroid) return false;
 
     final status = await Permission.notification.request();
     return status.isGranted;
@@ -108,29 +109,28 @@ class SmsListenerService {
 
   /// Backward-compatible helper.
   static Future<bool> requestPermissions() async {
-    if (!Platform.isAndroid) return false;
+    if (!_isAndroid) return false;
 
     final smsGranted = await requestSmsPermission();
     if (!smsGranted) return false;
 
-    await requestNotificationPermission();
-    return true;
+    final notificationGranted = await requestNotificationPermission();
+    return notificationGranted;
   }
 
   /// Returns `true` if the SMS permission is already granted (no prompt shown).
   static Future<bool> isPermissionGranted() async {
-    if (!Platform.isAndroid) return false;
+    if (!_isAndroid) return false;
     return Permission.sms.isGranted;
   }
 
   /// Starts listening for incoming SMS messages, both in the foreground and
   /// background. Safe to call multiple times — `telephony` deduplicates.
   static void startListening() {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
     _telephony.listenIncomingSms(
       onNewMessage: _handleForegroundSms,
-      listenInBackground: true,
-      onBackgroundMessage: backgroundSmsHandler,
+      listenInBackground: false,
     );
   }
 
@@ -151,9 +151,7 @@ class SmsListenerService {
       if (SmsTransactionParser.isDuplicate(transaction, box)) continue;
 
       final key = await box.add(transaction.toMap());
-      if (transaction.needsCategory) {
-        await NotificationService.showCategorizationPrompt(transaction, key);
-      }
+      await NotificationService.showCategorizationPrompt(transaction, key);
     }
   }
 }

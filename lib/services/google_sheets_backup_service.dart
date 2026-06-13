@@ -1,10 +1,9 @@
 import 'package:hive_flutter/hive_flutter.dart';
-
 import '../models/transaction_model.dart';
 import 'app_settings_service.dart';
 import 'google_sheets_backup_transport_stub.dart'
-  if (dart.library.html) 'google_sheets_backup_transport_web.dart'
-  as backup_transport;
+    if (dart.library.html) 'google_sheets_backup_transport_web.dart'
+    as backup_transport;
 
 class BackupResult {
   BackupResult({

@@ -1,5 +1,4 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -18,6 +17,9 @@ class MoreScreen extends StatefulWidget {
 class _MoreScreenState extends State<MoreScreen> {
   bool _smsEnabled = false;
 
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   @override
   void initState() {
     super.initState();
@@ -30,19 +32,21 @@ class _MoreScreenState extends State<MoreScreen> {
   }
 
   Future<void> _toggleSms(bool value) async {
-    if (!Platform.isAndroid) return;
+    if (!_isAndroid) return;
     if (value) {
       final smsGranted = await SmsListenerService.requestSmsPermission();
       if (smsGranted) {
-        SmsListenerService.startListening();
         final notificationGranted =
             await SmsListenerService.requestNotificationPermission();
-        if (mounted) setState(() => _smsEnabled = true);
-        if (!notificationGranted && mounted) {
+        if (notificationGranted) {
+          SmsListenerService.startListening();
+          if (mounted) setState(() => _smsEnabled = true);
+        } else if (mounted) {
+          setState(() => _smsEnabled = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'SMS auto-detect is enabled. Allow notifications to get categorize alerts.',
+                'Notification permission is required. Grant it in Android Settings to enable auto-detect.',
               ),
             ),
           );
@@ -160,7 +164,7 @@ class _MoreScreenState extends State<MoreScreen> {
                         );
                       },
                     ),
-                    if (Platform.isAndroid)
+                    if (_isAndroid)
                       _MoreItemData(
                         title: 'SMS Auto-detect',
                         subtitle:

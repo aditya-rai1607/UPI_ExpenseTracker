@@ -28,6 +28,34 @@ class SmsTransactionParser {
     caseSensitive: false,
   );
 
+  // Explicit debit patterns
+  static final RegExp _debitPattern = RegExp(
+    r'debited\s+for|'
+    r'is\s+debited|'
+    r'withdrawn|'
+    r'deducted|'
+    r'spent|'
+    r'purchase|'
+    r'upi\s+payment|'
+    r'\bdr\b|'
+    r'\bdebit\b',
+    caseSensitive: false,
+  );
+
+  // Explicit credit patterns
+  static final RegExp _creditPattern = RegExp(
+    r'is\s+credited|'
+    r'received|'
+    r'deposited|'
+    r'refund|'
+    r'cashback|'
+    r'reversal|'
+    r'reversed|'
+    r'\bcr\b|'
+    r'\bcredit\b',
+    caseSensitive: false,
+  );
+
   /// Returns `true` if the SMS is likely a bank or payment notification.
   ///
   /// Matches on either the [sender] ID (e.g. `HDFCBK`) or the [body] text
@@ -37,6 +65,7 @@ class SmsTransactionParser {
       return _amountKeywordPattern.hasMatch(body) ||
           TransactionParser.extractAmount(body) > 0;
     }
+
     return _bankBodyPattern.hasMatch(body) &&
         TransactionParser.extractAmount(body) > 0;
   }
@@ -60,6 +89,7 @@ class SmsTransactionParser {
     final now = DateTime.now();
 
     final type = _inferType(body);
+
     final category = type == TransactionType.debit
         ? TransactionParser.suggestCategory(merchant)
         : null;
@@ -81,26 +111,53 @@ class SmsTransactionParser {
   static bool isDuplicate(TransactionModel transaction, Box<dynamic> box) {
     for (var i = 0; i < box.length; i++) {
       final raw = box.getAt(i);
+
       if (raw is! Map) continue;
+
       try {
         final existing = TransactionModel.fromMap(raw.cast<dynamic, dynamic>());
-        if (existing.fingerprint == transaction.fingerprint) return true;
+
+        if (existing.fingerprint == transaction.fingerprint) {
+          return true;
+        }
       } catch (_) {
-        // skip malformed entries
+        // Skip malformed entries
       }
     }
+
     return false;
   }
 
-  /// Infers [TransactionType] from keywords in the SMS [body].
+  /// Infers [TransactionType] from the SMS body using banking-specific regex.
   static TransactionType _inferType(String body) {
+    // Debit gets priority because many debit SMS mention
+    // the merchant being credited.
+    if (_debitPattern.hasMatch(body)) {
+      return TransactionType.debit;
+    }
+
+    if (_creditPattern.hasMatch(body)) {
+      return TransactionType.credit;
+    }
+
+    // Fallback checks for uncommon formats.
     final lower = body.toLowerCase();
+
+    if (lower.contains('debited') ||
+        lower.contains('withdrawn') ||
+        lower.contains('deducted') ||
+        lower.contains('spent')) {
+      return TransactionType.debit;
+    }
+
     if (lower.contains('credited') ||
         lower.contains('received') ||
         lower.contains('refund') ||
         lower.contains('deposited')) {
       return TransactionType.credit;
     }
+
+    // Default to debit for unknown transaction messages.
     return TransactionType.debit;
   }
 }

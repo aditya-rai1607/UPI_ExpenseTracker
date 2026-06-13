@@ -42,7 +42,8 @@ dependencies:
   http: ^1.5.0
   intl: ^0.20.2
   uuid: ^4.5.1
-  telephony: ^0.2.0
+  telephony:
+    path: third_party/telephony
   flutter_local_notifications: ^18.0.0
   permission_handler: ^12.0.0
 
