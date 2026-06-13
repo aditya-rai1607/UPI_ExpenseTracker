@@ -14,7 +14,8 @@ String _inrFormat(double amount, {int decimalDigits = 2}) {
 }
 
 class InsightsScreen extends StatefulWidget {
-  const InsightsScreen({super.key});
+  final int initialTabIndex;
+  const InsightsScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<InsightsScreen> createState() => _InsightsScreenState();
@@ -46,7 +47,14 @@ class _InsightsScreenState extends State<InsightsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    final initial = (widget.initialTabIndex >= 0 && widget.initialTabIndex < 3)
+        ? widget.initialTabIndex
+        : 0;
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: initial,
+    );
   }
 
   @override

@@ -272,9 +272,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _openInsightsScreen() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const InsightsScreen()));
+    _openInsightsScreenAt(0);
+  }
+
+  void _openInsightsScreenAt(int initialTabIndex) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => InsightsScreen(initialTabIndex: initialTabIndex),
+      ),
+    );
   }
 
   void _openMoreScreen() {
@@ -501,76 +507,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final displayExpenseTotal = _displayExpenseTotal(analytics);
     final savingsAmount = analytics.totalIncome - analytics.totalExpense;
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: _softAccentSurface(context),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'MONTH\'S EXPENSES',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: _secondaryTextColor(context),
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.0,
+    return InkWell(
+      onTap: () => _openInsightsScreenAt(0),
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          color: _softAccentSurface(context),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x140F172A),
+              blurRadius: 18,
+              offset: Offset(0, 8),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _inrFormat(displayExpenseTotal),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: _expenseColor,
-              fontSize: 28,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: _SummaryMetricCard(
-                  icon: Icons.south_west_rounded,
-                  label: 'INCOME',
-                  value: analytics.totalIncome,
-                  valueColor: _incomeColor,
-                  labelColor: _textColor(context),
-                ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'MONTH\'S EXPENSES',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _secondaryTextColor(context),
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.0,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _SummaryMetricCard(
-                  icon: Icons.savings_rounded,
-                  label: 'SAVINGS',
-                  value: savingsAmount,
-                  valueColor: savingsAmount < 0
-                      ? _expenseColor
-                      : _textColor(context),
-                  labelColor: const Color.fromARGB(255, 8, 118, 151),
-                  showSigned: true,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _inrFormat(displayExpenseTotal),
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: _expenseColor,
+                fontSize: 28,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: _SummaryMetricCard(
+                    icon: Icons.south_west_rounded,
+                    label: 'INCOME',
+                    value: analytics.totalIncome,
+                    valueColor: _incomeColor,
+                    labelColor: _textColor(context),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SummaryMetricCard(
+                    icon: Icons.savings_rounded,
+                    label: 'SAVINGS',
+                    value: savingsAmount,
+                    valueColor: savingsAmount < 0
+                        ? _expenseColor
+                        : _textColor(context),
+                    labelColor: const Color.fromARGB(255, 8, 118, 151),
+                    showSigned: true,
+                  ),
+                ),
+              ],
+            ),
+            if (lastBackupAt != null) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                'Last backup ${DateFormat('dd MMM, hh:mm a').format(lastBackupAt.toLocal())}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: _secondaryTextColor(context),
                 ),
               ),
             ],
-          ),
-          if (lastBackupAt != null) ...<Widget>[
-            const SizedBox(height: 12),
-            Text(
-              'Last backup ${DateFormat('dd MMM, hh:mm a').format(lastBackupAt.toLocal())}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: _secondaryTextColor(context),
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -587,7 +597,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return InkWell(
-      onTap: _openInsightsScreen,
+      onTap: () => _openInsightsScreenAt(2),
       borderRadius: BorderRadius.circular(24),
       child: Ink(
         padding: const EdgeInsets.all(16),
@@ -792,7 +802,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildCategoryChart(BuildContext context, MonthlyAnalytics analytics) {
-    final breakdown = _buildCategoryBreakdown(analytics.expenseByCategory);
+    final hasExpenseData = analytics.expenseByCategory.isNotEmpty;
+    final breakdown = hasExpenseData
+        ? _buildCategoryBreakdown(analytics.expenseByCategory)
+        : const <_CategoryBreakdownItem>[
+            _CategoryBreakdownItem(
+              label: 'No spend',
+              value: 1,
+              percentage: 0,
+              color: Color(0xFFD1D5DB),
+              isPlaceholder: true,
+            ),
+          ];
     final displayExpenseTotal = _displayExpenseTotal(analytics);
 
     return Card(
@@ -820,25 +841,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 18),
-            if (analytics.expenseByCategory.isEmpty)
-              SizedBox(
-                height: 220,
-                child: Center(
-                  child: Text(
-                    'No expense data for this month',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: _secondaryTextColor(context),
-                    ),
-                  ),
-                ),
-              )
-            else
-              _CategoryPieChart(
-                breakdown: breakdown,
-                totalExpenseLabel:
-                    '₹${_formatCompactAmount(displayExpenseTotal)}',
-                sectionBuilder: _buildCategorySections,
-              ),
+            _CategoryPieChart(
+              breakdown: breakdown,
+              totalExpenseLabel:
+                  '₹${_formatCompactAmount(displayExpenseTotal)}',
+              sectionBuilder: _buildCategorySections,
+            ),
           ],
         ),
       ),
@@ -957,6 +965,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       0,
       (max, item) => math.max(max, math.max(item.income, item.expense)),
     );
+    final effectiveMaxY = maxValue == 0 ? 1000.0 : maxValue * 1.2;
+    final horizontalInterval = effectiveMaxY / 4;
 
     return Card(
       elevation: 0,
@@ -999,14 +1009,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       },
                     ),
                   ),
-                  maxY: maxValue == 0 ? 100 : maxValue * 1.2,
+                  minY: 0,
+                  maxY: effectiveMaxY,
                   alignment: BarChartAlignment.spaceAround,
                   gridData: FlGridData(
                     show: true,
                     drawVerticalLine: false,
-                    horizontalInterval: maxValue == 0
-                        ? 25
-                        : (maxValue * 1.2) / 4,
+                    horizontalInterval: horizontalInterval,
                     getDrawingHorizontalLine: (_) =>
                         FlLine(color: _borderColor(context), strokeWidth: 1),
                   ),
@@ -1023,7 +1032,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         showTitles: true,
                         reservedSize: 44,
                         getTitlesWidget: (value, meta) => Text(
-                          '₹${(value / 1000).toStringAsFixed(value >= 1000 ? 0 : 1)}k',
+                          _formatTrendAxisLabel(value),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: _secondaryTextColor(context)),
                         ),
@@ -1195,6 +1204,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return '${(amount / 1000).toStringAsFixed(1)}k';
     }
     return amount.toStringAsFixed(0);
+  }
+
+  String _formatTrendAxisLabel(double value) {
+    if (value == 0) {
+      return '0';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}k';
+    }
+    return value.toStringAsFixed(0);
   }
 }
 
@@ -1394,12 +1413,14 @@ class _CategoryBreakdownItem {
     required this.value,
     required this.percentage,
     required this.color,
+    this.isPlaceholder = false,
   });
 
   final String label;
   final double value;
   final double percentage;
   final Color color;
+  final bool isPlaceholder;
 }
 
 class _CategoryPieChart extends StatelessWidget {
@@ -1494,6 +1515,7 @@ class _CategoryDetailsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasOnlyPlaceholder = items.length == 1 && items.first.isPlaceholder;
     final splitIndex = (items.length / 2).ceil();
     final leftColumnItems = items.take(splitIndex).toList(growable: false);
     final rightColumnItems = items.skip(splitIndex).toList(growable: false);
@@ -1518,44 +1540,54 @@ class _CategoryDetailsPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Column(
-                  children: leftColumnItems
-                      .map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _CategoryMetricRow(item: item),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
+          if (hasOnlyPlaceholder)
+            Text(
+              'No expense data for this month yet.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
               ),
-              if (rightColumnItems.isNotEmpty) const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  children: rightColumnItems
-                      .map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _CategoryMetricRow(item: item),
-                        ),
-                      )
-                      .toList(growable: false),
+            )
+          else ...<Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Column(
+                    children: leftColumnItems
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _CategoryMetricRow(item: item),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Total Categories: ${items.length}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
+                if (rightColumnItems.isNotEmpty) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    children: rightColumnItems
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _CategoryMetricRow(item: item),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 4),
+            Text(
+              'Total Categories: ${items.length}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );
