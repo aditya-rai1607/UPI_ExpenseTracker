@@ -49,7 +49,7 @@ void main() {
 
     expect(analytics.totalExpense, 200);
     expect(analytics.totalIncome, 1000);
-  expect(analytics.totalInvestment, 250);
+    expect(analytics.totalInvestment, 250);
     expect(analytics.netCashflow, 800);
     expect(analytics.expenseByCategory['Food'], 120);
     expect(analytics.expenseByCategory['Travel'], 80);
@@ -171,4 +171,80 @@ void main() {
     expect(analytics.totalInvestment, 150);
     expect(analytics.netCashflow, 600);
   });
+
+  test('calculateOvertimeData produces daily buckets with zeros filled', () {
+    final transactions = <TransactionModel>[
+      TransactionModel(
+        amount: 100,
+        merchant: 'A',
+        date: DateTime(2026, 6, 1),
+        type: TransactionType.debit,
+      ),
+      TransactionModel(
+        amount: 50,
+        merchant: 'B',
+        date: DateTime(2026, 6, 3),
+        type: TransactionType.debit,
+      ),
+    ];
+
+    final points = AnalyticsService.calculateOvertimeData(
+      transactions: transactions,
+      start: DateTime(2026, 6, 1),
+      end: DateTime(2026, 6, 5),
+      frequency: OvertimeFrequency.daily,
+    );
+
+    expect(points.length, 5);
+    expect(points[0].amount, 100);
+    expect(points[1].amount, 0);
+    expect(points[2].amount, 50);
+    expect(points[3].amount, 0);
+    expect(points[4].amount, 0);
+  });
+
+  test('calculateOvertimeData produces monthly buckets', () {
+    final transactions = <TransactionModel>[
+      TransactionModel(
+        amount: 100,
+        merchant: 'A',
+        date: DateTime(2026, 1, 5),
+        type: TransactionType.debit,
+      ),
+      TransactionModel(
+        amount: 200,
+        merchant: 'B',
+        date: DateTime(2026, 3, 10),
+        type: TransactionType.debit,
+      ),
+    ];
+
+    final points = AnalyticsService.calculateOvertimeData(
+      transactions: transactions,
+      start: DateTime(2026, 1, 1),
+      end: DateTime(2026, 3, 31),
+      frequency: OvertimeFrequency.monthly,
+    );
+
+    expect(points.length, 3);
+    expect(points[0].amount, 100);
+    expect(points[1].amount, 0);
+    expect(points[2].amount, 200);
+  });
+
+  test(
+    'calculateOvertimeData returns empty list for no transactions in range',
+    () {
+      final transactions = <TransactionModel>[];
+
+      final points = AnalyticsService.calculateOvertimeData(
+        transactions: transactions,
+        start: DateTime(2026, 1, 1),
+        end: DateTime(2026, 1, 31),
+        frequency: OvertimeFrequency.daily,
+      );
+
+      expect(points, isEmpty);
+    },
+  );
 }

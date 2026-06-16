@@ -19,6 +19,15 @@ class MonthlyTrendSnapshot {
   final double expense;
 }
 
+enum OvertimeFrequency { daily, weekly, monthly }
+
+class OvertimeDataPoint {
+  OvertimeDataPoint({required this.date, required this.amount});
+
+  final DateTime date;
+  final double amount;
+}
+
 class MonthlyAnalytics {
   MonthlyAnalytics({
     required this.month,
@@ -149,5 +158,68 @@ class AnalyticsService {
     }
 
     return amounts;
+  }
+
+  static List<OvertimeDataPoint> calculateOvertimeData({
+    required List<TransactionModel> transactions,
+    required DateTime start,
+    required DateTime end,
+    required OvertimeFrequency frequency,
+  }) {
+    final filtered = transactions
+        .where((t) {
+          final d = t.date;
+          return !d.isBefore(start) && !d.isAfter(end);
+        })
+        .toList(growable: false);
+
+    if (filtered.isEmpty) return <OvertimeDataPoint>[];
+
+    DateTime bucketKey(DateTime d) {
+      switch (frequency) {
+        case OvertimeFrequency.daily:
+          return DateTime(d.year, d.month, d.day);
+        case OvertimeFrequency.weekly:
+          // Use Monday as week start
+          final monday = d.subtract(Duration(days: d.weekday - 1));
+          return DateTime(monday.year, monday.month, monday.day);
+        case OvertimeFrequency.monthly:
+          return DateTime(d.year, d.month);
+      }
+    }
+
+    final totals = <DateTime, double>{};
+    for (final t in filtered) {
+      final key = bucketKey(t.date);
+      totals.update(key, (v) => v + t.amount, ifAbsent: () => t.amount);
+    }
+
+    // Determine the first bucket to emit: use the earliest bucket present in totals
+    final firstBucket = totals.keys.reduce((a, b) => a.isBefore(b) ? a : b);
+
+    DateTime iterateNext(DateTime current) {
+      switch (frequency) {
+        case OvertimeFrequency.daily:
+          return current.add(const Duration(days: 1));
+        case OvertimeFrequency.weekly:
+          return current.add(const Duration(days: 7));
+        case OvertimeFrequency.monthly:
+          final nextMonth = current.month == 12 ? 1 : current.month + 1;
+          final year = current.month == 12 ? current.year + 1 : current.year;
+          return DateTime(year, nextMonth);
+      }
+    }
+
+    final endBucket = bucketKey(end);
+    final points = <OvertimeDataPoint>[];
+    var cursor = firstBucket;
+    while (!cursor.isAfter(endBucket)) {
+      final value = totals[cursor] ?? 0.0;
+      points.add(OvertimeDataPoint(date: cursor, amount: value));
+      cursor = iterateNext(cursor);
+    }
+
+    points.sort((a, b) => a.date.compareTo(b.date));
+    return points;
   }
 }
