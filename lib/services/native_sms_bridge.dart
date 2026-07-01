@@ -21,6 +21,29 @@ class NativeSmsBridge {
     }
   }
 
+  /// Returns true if RECEIVE_SMS permission is granted (no dialog shown).
+  static Future<bool> hasSmsPermission() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('hasSmsPermission');
+      return result == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Returns raw SMS messages queued by the native NativeSmsReceiver while
+  /// the Dart background isolate was not yet registered. Clears the queue.
+  static Future<List<Map<String, dynamic>>> getPendingSmsMessages() async {
+    try {
+      final res = await _channel.invokeMethod<String>('getPendingSms');
+      if (res == null || res.isEmpty) return [];
+      final List decoded = json.decode(res) as List;
+      return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Drains the native pending queue into Hive and shows categorization prompts.
   /// This is safe to call from UI startup (post frame) and is idempotent.
   static Future<void> drainPendingTransactions() async {

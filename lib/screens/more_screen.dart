@@ -40,6 +40,8 @@ class _MoreScreenState extends State<MoreScreen> {
             await SmsListenerService.requestNotificationPermission();
         if (notificationGranted) {
           SmsListenerService.startListening();
+          // Clear skip flag if it was set previously.
+          await AppSettingsService.setSkipPermissions(false);
           if (mounted) setState(() => _smsEnabled = true);
         } else if (mounted) {
           setState(() => _smsEnabled = false);

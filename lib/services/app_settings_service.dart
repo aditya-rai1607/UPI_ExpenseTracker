@@ -60,4 +60,15 @@ class AppSettingsService {
     };
     await _box.put(themeModeKey, value);
   }
+
+  // Persisted flag to allow users to skip permission onboarding on Android.
+  static const String skipPermissionsKey = 'skip_permissions';
+
+  static bool getSkipPermissions() {
+    return _box.get(skipPermissionsKey) == true;
+  }
+
+  static Future<void> setSkipPermissions(bool skip) async {
+    await _box.put(skipPermissionsKey, skip);
+  }
 }

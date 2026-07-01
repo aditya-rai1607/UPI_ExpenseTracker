@@ -120,12 +120,6 @@ class _InsightsScreenState extends State<InsightsScreen>
     super.dispose();
   }
 
-  void _shiftMonth(int delta) {
-    setState(() {
-      // keep compatibility but do nothing when using range chips
-    });
-  }
-
   DateTimeRange _effectiveDateRange() {
     final now = DateTime.now();
     switch (_selectedRange) {
@@ -309,11 +303,44 @@ class _InsightsScreenState extends State<InsightsScreen>
                                   _selectedCategory,
                             )
                             .toList(growable: false);
+                  final now = DateTime.now();
+                  final chartRange = switch (_selectedFrequency) {
+                    OvertimeFrequency.daily => range,
+                    OvertimeFrequency.weekly => DateTimeRange(
+                      start: DateTime(
+                        now.year,
+                        now.month,
+                        now.day,
+                      ).subtract(const Duration(days: 6)),
+                      end: now,
+                    ),
+                    OvertimeFrequency.monthly => DateTimeRange(
+                      start: DateTime(now.year, now.month - 5, 1),
+                      end: now,
+                    ),
+                  };
+                  final chartFrequency = switch (_selectedFrequency) {
+                    OvertimeFrequency.daily => OvertimeFrequency.daily,
+                    OvertimeFrequency.weekly => OvertimeFrequency.daily,
+                    OvertimeFrequency.monthly => OvertimeFrequency.monthly,
+                  };
+                  final chartSourceTransactions =
+                      _selectedFrequency == OvertimeFrequency.daily
+                      ? chartTransactions
+                      : (_selectedCategory == null
+                            ? tabTransactions
+                            : tabTransactions
+                                  .where(
+                                    (t) =>
+                                        (t.category ?? '').trim() ==
+                                        _selectedCategory,
+                                  )
+                                  .toList(growable: false));
                   final points = AnalyticsService.calculateOvertimeData(
-                    transactions: chartTransactions,
-                    start: range.start,
-                    end: range.end,
-                    frequency: _selectedFrequency,
+                    transactions: chartSourceTransactions,
+                    start: chartRange.start,
+                    end: chartRange.end,
+                    frequency: chartFrequency,
                   );
 
                   if (points.isEmpty) {
@@ -336,19 +363,22 @@ class _InsightsScreenState extends State<InsightsScreen>
                   final maxY = points
                       .map((p) => p.amount)
                       .fold<double>(0.0, (a, b) => b > a ? b : a);
+                  final paddedMaxY = maxY == 0 ? 10.0 : maxY * 1.1;
                   return TickerMode(
                     enabled: false,
                     child: SizedBox(
                       height: 260,
                       child: LineChart(
                         key: ValueKey(
-                          '${_selectedCategory}_${_selectedFrequency}_${range.start}_${range.end}_${spots.length}',
+                          '${_selectedCategory}_${_selectedFrequency}_${chartRange.start}_${chartRange.end}_${spots.length}',
                         ),
                         LineChartData(
+                          minY: 0,
+                          maxY: paddedMaxY,
                           gridData: FlGridData(
                             show: true,
                             drawVerticalLine: false,
-                            horizontalInterval: maxY / 4 == 0 ? 1 : maxY / 4,
+                            horizontalInterval: paddedMaxY / 4,
                           ),
                           titlesData: FlTitlesData(
                             topTitles: const AxisTitles(
@@ -362,9 +392,6 @@ class _InsightsScreenState extends State<InsightsScreen>
                                 showTitles: true,
                                 reservedSize: 56,
                                 getTitlesWidget: (value, meta) {
-                                  if (value == meta.min || value == meta.max) {
-                                    return const SizedBox.shrink();
-                                  }
                                   return Text(
                                     _inrFormat(value, decimalDigits: 0),
                                     style: Theme.of(context).textTheme.bodySmall
@@ -379,9 +406,14 @@ class _InsightsScreenState extends State<InsightsScreen>
                             bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
+                                interval: 1,
                                 reservedSize: 36,
                                 getTitlesWidget: (value, meta) {
-                                  final idx = value.toInt();
+                                  final roundedValue = value.roundToDouble();
+                                  if ((value - roundedValue).abs() > 0.001) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final idx = roundedValue.toInt();
                                   if (idx < 0 || idx >= points.length) {
                                     return const SizedBox.shrink();
                                   }
@@ -392,6 +424,22 @@ class _InsightsScreenState extends State<InsightsScreen>
                                       padding: const EdgeInsets.only(top: 6),
                                       child: Text(
                                         DateFormat('MMM').format(d),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: _mutedTextColor(context),
+                                              fontSize: 9,
+                                            ),
+                                      ),
+                                    );
+                                  }
+                                  if (_selectedFrequency ==
+                                      OvertimeFrequency.weekly) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        DateFormat('d MMM').format(d),
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall
@@ -449,13 +497,13 @@ class _InsightsScreenState extends State<InsightsScreen>
                           lineBarsData: [
                             LineChartBarData(
                               spots: spots,
-                              isCurved: true,
+                              isCurved: false,
                               color: accentColor,
                               barWidth: 3,
                               dotData: FlDotData(show: spots.length <= 60),
                               belowBarData: BarAreaData(
                                 show: true,
-                                color: accentColor.withOpacity(0.12),
+                                color: accentColor.withValues(alpha: 0.12),
                               ),
                             ),
                           ],
@@ -466,62 +514,88 @@ class _InsightsScreenState extends State<InsightsScreen>
                 },
               ),
               const SizedBox(height: 12),
-              Row(
+              Column(
                 children: [
-                  const Text(
-                    'Showing',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Builder(
-                      builder: (ctx) {
-                        final categories = categoryEntries
-                            .map((e) => e.key)
-                            .toList(growable: false);
-                        return DropdownButton<String?>(
-                          value: _selectedCategory,
-                          isExpanded: true,
-                          items: <DropdownMenuItem<String?>>[
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('All categories'),
-                            ),
-                            ...categories.map(
-                              (c) => DropdownMenuItem(value: c, child: Text(c)),
-                            ),
-                          ],
-                          onChanged: (v) =>
-                              setState(() => _selectedCategory = v),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ToggleButtons(
-                    isSelected: [
-                      _selectedFrequency == OvertimeFrequency.daily,
-                      _selectedFrequency == OvertimeFrequency.weekly,
-                      _selectedFrequency == OvertimeFrequency.monthly,
+                  Row(
+                    children: [
+                      const Text(
+                        'Showing',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Builder(
+                          builder: (ctx) {
+                            final categories = categoryEntries
+                                .map((e) => e.key)
+                                .toList(growable: false);
+                            return DropdownButton<String?>(
+                              value: _selectedCategory,
+                              isExpanded: true,
+                              items: <DropdownMenuItem<String?>>[
+                                const DropdownMenuItem(
+                                  value: null,
+                                  child: Text('All categories'),
+                                ),
+                                ...categories.map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(c),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => _selectedCategory = v),
+                            );
+                          },
+                        ),
+                      ),
                     ],
-                    onPressed: (i) {
-                      setState(() {
-                        _selectedFrequency = OvertimeFrequency.values[i];
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    children: const [
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('Daily'),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 10),
+                        child: Text(
+                          'Frequency',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('Weekly'),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('Monthly'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: ToggleButtons(
+                            isSelected: [
+                              _selectedFrequency == OvertimeFrequency.daily,
+                              _selectedFrequency == OvertimeFrequency.weekly,
+                              _selectedFrequency == OvertimeFrequency.monthly,
+                            ],
+                            onPressed: (i) {
+                              setState(() {
+                                _selectedFrequency =
+                                    OvertimeFrequency.values[i];
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            children: const [
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('Daily'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('Weekly'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('Monthly'),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -732,7 +806,9 @@ class _InsightsScreenState extends State<InsightsScreen>
                                     });
                                   }
                                 },
-                                selectedColor: _expenseColor.withOpacity(0.12),
+                                selectedColor: _expenseColor.withValues(
+                                  alpha: 0.12,
+                                ),
                                 backgroundColor: _softAccentSurface(context),
                                 labelStyle: Theme.of(context)
                                     .textTheme

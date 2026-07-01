@@ -194,9 +194,6 @@ class AnalyticsService {
       totals.update(key, (v) => v + t.amount, ifAbsent: () => t.amount);
     }
 
-    // Determine the first bucket to emit: use the earliest bucket present in totals
-    final firstBucket = totals.keys.reduce((a, b) => a.isBefore(b) ? a : b);
-
     DateTime iterateNext(DateTime current) {
       switch (frequency) {
         case OvertimeFrequency.daily:
@@ -210,6 +207,7 @@ class AnalyticsService {
       }
     }
 
+    final firstBucket = bucketKey(start);
     final endBucket = bucketKey(end);
     final points = <OvertimeDataPoint>[];
     var cursor = firstBucket;

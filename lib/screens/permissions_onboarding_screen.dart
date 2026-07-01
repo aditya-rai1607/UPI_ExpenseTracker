@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/app_settings_service.dart';
 
 import '../services/sms_listener_service.dart';
 
@@ -36,11 +37,11 @@ class _PermissionsOnboardingScreenState
       return;
     }
 
-    final smsStatus = await Permission.sms.status;
+    final smsGranted = await SmsListenerService.isPermissionGranted();
     final notificationStatus = await Permission.notification.status;
 
     setState(() {
-      _smsPermissionGranted = smsStatus.isGranted;
+      _smsPermissionGranted = smsGranted;
       _notificationPermissionGranted = notificationStatus.isGranted;
     });
   }
@@ -53,14 +54,14 @@ class _PermissionsOnboardingScreenState
 
     setState(() => _isRequestingPermissions = true);
 
-    final status = await Permission.sms.request();
+    final granted = await SmsListenerService.requestSmsPermission();
 
     setState(() {
-      _smsPermissionGranted = status.isGranted;
+      _smsPermissionGranted = granted;
       _isRequestingPermissions = false;
     });
 
-    if (status.isDenied) {
+    if (!granted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -107,12 +108,21 @@ class _PermissionsOnboardingScreenState
     // Start SMS listener if SMS permission is granted
     if (_smsPermissionGranted && _isAndroid) {
       SmsListenerService.startListening();
+      // If user had previously skipped, clear the skip flag because we've
+      // now enabled the required permission.
+      await AppSettingsService.setSkipPermissions(false);
     }
 
     // Mark onboarding as complete and navigate to dashboard
     if (mounted) {
       Navigator.of(context).pushReplacementNamed('/dashboard');
     }
+  }
+
+  Future<void> _skipPermissions() async {
+    // Persist skip choice so subsequent launches bypass onboarding on Android.
+    await AppSettingsService.setSkipPermissions(true);
+    if (mounted) Navigator.of(context).pushReplacementNamed('/dashboard');
   }
 
   @override
@@ -195,6 +205,15 @@ class _PermissionsOnboardingScreenState
                           'Continue to App',
                           style: TextStyle(fontSize: 16),
                         ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: _isRequestingPermissions ? null : _skipPermissions,
+                  child: const Text('Skip for now'),
                 ),
               ),
 

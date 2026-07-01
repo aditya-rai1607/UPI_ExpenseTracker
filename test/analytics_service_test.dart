@@ -232,6 +232,58 @@ void main() {
     expect(points[2].amount, 200);
   });
 
+  test('calculateOvertimeData keeps leading empty daily buckets', () {
+    final transactions = <TransactionModel>[
+      TransactionModel(
+        amount: 75,
+        merchant: 'Late bucket',
+        date: DateTime(2026, 6, 4),
+        type: TransactionType.debit,
+      ),
+    ];
+
+    final points = AnalyticsService.calculateOvertimeData(
+      transactions: transactions,
+      start: DateTime(2026, 6, 1),
+      end: DateTime(2026, 6, 5),
+      frequency: OvertimeFrequency.daily,
+    );
+
+    expect(points.length, 5);
+    expect(points[0].date, DateTime(2026, 6, 1));
+    expect(points[0].amount, 0);
+    expect(points[1].amount, 0);
+    expect(points[2].amount, 0);
+    expect(points[3].amount, 75);
+    expect(points[4].amount, 0);
+  });
+
+  test('calculateOvertimeData keeps leading empty monthly buckets', () {
+    final transactions = <TransactionModel>[
+      TransactionModel(
+        amount: 220,
+        merchant: 'March merchant',
+        date: DateTime(2026, 3, 12),
+        type: TransactionType.debit,
+      ),
+    ];
+
+    final points = AnalyticsService.calculateOvertimeData(
+      transactions: transactions,
+      start: DateTime(2026, 1, 1),
+      end: DateTime(2026, 3, 31),
+      frequency: OvertimeFrequency.monthly,
+    );
+
+    expect(points.length, 3);
+    expect(points[0].date, DateTime(2026, 1));
+    expect(points[0].amount, 0);
+    expect(points[1].date, DateTime(2026, 2));
+    expect(points[1].amount, 0);
+    expect(points[2].date, DateTime(2026, 3));
+    expect(points[2].amount, 220);
+  });
+
   test(
     'calculateOvertimeData returns empty list for no transactions in range',
     () {

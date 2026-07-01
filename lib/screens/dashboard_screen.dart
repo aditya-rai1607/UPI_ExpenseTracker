@@ -2,12 +2,14 @@ import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../models/transaction_model.dart';
 import '../services/analytics_service.dart';
 import '../services/app_settings_service.dart';
+import '../services/sms_listener_service.dart';
 import '../services/native_sms_bridge.dart';
 import '../widgets/transaction_tile.dart';
 import 'add_transaction_screen.dart';
@@ -363,6 +365,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? 'You have some new uncategoried finances.'
         : 'Your finances are looking healthy.';
 
+    // Android-only SMS permission reminder: show when SMS permission is not
+    // granted and the user hasn't skipped permanently.
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final skipPermissions = AppSettingsService.getSkipPermissions();
+
     return Row(
       children: <Widget>[
         Expanded(
@@ -380,6 +388,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: _secondaryTextColor(context),
                 ),
               ),
+              const SizedBox(height: 6),
+              if (isAndroid && !skipPermissions)
+                FutureBuilder<bool>(
+                  future: SmsListenerService.isPermissionGranted(),
+                  builder: (context, snap) {
+                    final granted = snap.data == true;
+                    if (granted) return const SizedBox.shrink();
+                    return Text(
+                      'SMS read permission not granted. Enable in Settings or open Permissions to grant.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  },
+                ),
             ],
           ),
         ),

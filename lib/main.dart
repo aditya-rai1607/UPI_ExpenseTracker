@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/permissions_onboarding_screen.dart';
@@ -167,16 +166,22 @@ class _HomeSelectorState extends State<_HomeSelector>
       return true; // Non-Android platforms skip permission check
     }
 
-    // Require both SMS and notification permissions at startup.
-    final smsPermissionStatus = await Permission.sms.status;
-    final notificationPermissionStatus = await Permission.notification.status;
+    // Only SMS permission is required to start the listener.
+    // Notification permission is optional and must not block SMS capture.
+    final smsGranted = await SmsListenerService.isPermissionGranted();
 
-    if (smsPermissionStatus.isGranted &&
-        notificationPermissionStatus.isGranted) {
-      // Required permissions granted; resume listener.
+    if (smsGranted) {
+      // SMS permission granted; resume listener.
       SmsListenerService.startListening();
       // Drain any transactions processed natively while app was closed.
       _drainNativeQueue();
+      return true;
+    }
+
+    // If user previously chose to skip permissions, allow access but do not
+    // start the SMS listener (it will be started only when SMS permission
+    // is actually granted).
+    if (AppSettingsService.getSkipPermissions()) {
       return true;
     }
 
@@ -185,26 +190,44 @@ class _HomeSelectorState extends State<_HomeSelector>
   }
 
   Future<void> _drainNativeQueue() async {
+    // Path A: already-parsed transactions (legacy queue, currently empty but kept for safety).
     try {
       final pending = await NativeSmsBridge.getPendingTransactions();
-      if (pending.isEmpty) return;
-
-      final box = Hive.box('transactions');
-
-      for (final map in pending) {
-        try {
-          final txn = TransactionModel.fromMap(map);
-          if (SmsTransactionParser.isDuplicate(txn, box)) continue;
-
-          final key = await box.add(txn.toMap());
-          await NotificationService.showCategorizationPrompt(txn, key);
-        } catch (_) {
-          // Ignore malformed entries
+      if (pending.isNotEmpty) {
+        final box = Hive.box('transactions');
+        for (final map in pending) {
+          try {
+            final txn = TransactionModel.fromMap(map);
+            if (SmsTransactionParser.isDuplicate(txn, box)) continue;
+            final key = await box.add(txn.toMap());
+            await NotificationService.showCategorizationPrompt(txn, key);
+          } catch (_) {}
         }
       }
-    } catch (_) {
-      // best-effort
-    }
+    } catch (_) {}
+
+    // Path B: raw SMS queued by NativeSmsReceiver (fallback for when Dart
+    // background isolate was not yet registered — e.g. first install).
+    try {
+      final smsList = await NativeSmsBridge.getPendingSmsMessages();
+      if (smsList.isEmpty) return;
+
+      final box = Hive.box('transactions');
+      for (final sms in smsList) {
+        try {
+          final body = (sms['body'] as String?) ?? '';
+          final sender = (sms['sender'] as String?) ?? '';
+          if (!SmsTransactionParser.isBankSms(body, sender)) continue;
+
+          final transactions = SmsTransactionParser.parseTransactions(body);
+          for (final txn in transactions) {
+            if (SmsTransactionParser.isDuplicate(txn, box)) continue;
+            final key = await box.add(txn.toMap());
+            await NotificationService.showCategorizationPrompt(txn, key);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   @override

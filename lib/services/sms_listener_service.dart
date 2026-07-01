@@ -5,6 +5,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:telephony/telephony.dart';
 
+import 'native_sms_bridge.dart';
+
 import '../models/transaction_model.dart';
 import 'notification_service.dart';
 import 'sms_transaction_parser.dart';
@@ -95,8 +97,15 @@ class SmsListenerService {
   static Future<bool> requestSmsPermission() async {
     if (!_isAndroid) return false;
 
-    final status = await Permission.sms.request();
-    return status.isGranted;
+    // Use the telephony plugin to request only the permissions declared in
+    // the manifest (we removed READ_SMS). Telephony will request RECEIVE_SMS
+    // which is appropriate for incoming SMS broadcasts.
+    try {
+      final granted = await _telephony.requestSmsPermissions;
+      return granted == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Requests notification permission separately from SMS permission.
@@ -121,7 +130,8 @@ class SmsListenerService {
   /// Returns `true` if the SMS permission is already granted (no prompt shown).
   static Future<bool> isPermissionGranted() async {
     if (!_isAndroid) return false;
-    return Permission.sms.isGranted;
+    // Permission.sms maps to READ_SMS; check RECEIVE_SMS via native bridge.
+    return await NativeSmsBridge.hasSmsPermission();
   }
 
   /// Starts listening for incoming SMS messages, both in the foreground and
@@ -130,7 +140,8 @@ class SmsListenerService {
     if (!_isAndroid) return;
     _telephony.listenIncomingSms(
       onNewMessage: _handleForegroundSms,
-      listenInBackground: false,
+      onBackgroundMessage: backgroundSmsHandler,
+      listenInBackground: true,
     );
   }
 
